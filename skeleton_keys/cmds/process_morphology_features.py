@@ -6,6 +6,7 @@ from skeleton_keys.database_queries import swc_paths_from_database
 from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
     apply_loadings_to_profiles,
+    earthmover_distance_between_compartments,
 )
 
 
@@ -144,13 +145,17 @@ def main():
     analyze_axon_flag = module.args['analyze_axon']
     analyze_basal_flag = module.args['analyze_basal_dendrite']
     analyze_apical_flag = module.args['analyze_apical_dendrite']
-    analyze_basal_dendrite_depth = module.args['analyze_basal_dendrite_depth']
+    analyze_basal_dendrite_depth_flag = module.args['analyze_basal_dendrite_depth']
 
     # Analyze depth profiles
     # Assumes that depth profile file has columns in the format:
     # "{compartment label}_{feature number}"
 
     depth_result = []
+    axon_depth_df = None
+    apical_depth_df = None
+    basal_depth_df = None
+
     if analyze_axon_flag:
         axon_depth_df = select_and_convert_depth_columns(depth_profile_df, "2_")
         available_ids = axon_depth_df.index.intersection(specimen_ids)
@@ -187,23 +192,66 @@ def main():
                     "value": transformed[i, j],
                 })
 
-    if analyze_basal_dendrite_depth:
+    if analyze_basal_flag:
         basal_depth_df = select_and_convert_depth_columns(depth_profile_df, "3_")
-        available_ids = basal_depth_df.index.intersection(specimen_ids)
-        transformed = analyze_depth_profiles(
-            basal_depth_df.loc[available_ids, :],
-            module.args["basal_dendrite_depth_profile_loadings_file"],
-            module.args["save_basal_dendrite_depth_profile_loadings_file"]
-        )
-        for i, sp_id in enumerate(available_ids):
-            for j in range(transformed.shape[1]):
-                depth_result.append({
-                    "specimen_id": sp_id,
-                    "feature": f"depth_pc_{j}",
-                    "compartment_type": "basal_dendrite",
-                    "dimension": "none",
-                    "value": transformed[i, j],
-                })
+
+        # Extra option, since PCA on basal dendrite profiles is not
+        # typically that interesting, but we need the basal_depth_df for
+        # other analyses
+        if analyze_basal_dendrite_depth_flag:
+            available_ids = basal_depth_df.index.intersection(specimen_ids)
+            transformed = analyze_depth_profiles(
+                basal_depth_df.loc[available_ids, :],
+                module.args["basal_dendrite_depth_profile_loadings_file"],
+                module.args["save_basal_dendrite_depth_profile_loadings_file"]
+            )
+            for i, sp_id in enumerate(available_ids):
+                for j in range(transformed.shape[1]):
+                    depth_result.append({
+                        "specimen_id": sp_id,
+                        "feature": f"depth_pc_{j}",
+                        "compartment_type": "basal_dendrite",
+                        "dimension": "none",
+                        "value": transformed[i, j],
+                    })
+
+    # Analyze earthmover distances between depth profiles
+    emd_result = []
+    if analyze_axon_flag and analyze_apical_flag:
+        axon_apical_emd_df = earthmover_distance_between_compartments(
+            axon_depth_df, apical_depth_df)
+        for r in axon_apical_emd_df.itertuples():
+            emd_result.append({
+                "specimen_id": r.Index,
+                "feature": "emd_with_apical_dendrite",
+                "compartment_type": "axon",
+                "dimension": "none",
+                "value": r.emd,
+            })
+
+    if analyze_axon_flag and analyze_basal_flag:
+        axon_basal_emd_df = earthmover_distance_between_compartments(
+            axon_depth_df, basal_depth_df)
+        for r in axon_basal_emd_df.itertuples():
+            emd_result.append({
+                "specimen_id": r.Index,
+                "feature": "emd_with_basal_dendrite",
+                "compartment_type": "axon",
+                "dimension": "none",
+                "value": r.emd,
+            })
+
+    if analyze_apical_flag and analyze_basal_flag:
+        apical_basal_emd_df = earthmover_distance_between_compartments(
+            apical_depth_df, basal_depth_df)
+        for r in apical_basal_emd_df.itertuples():
+            emd_result.append({
+                "specimen_id": r.Index,
+                "feature": "emd_with_basal_dendrite",
+                "compartment_type": "apical_dendrite",
+                "dimension": "none",
+                "value": r.emd,
+            })
 
     # TODO: ANALYZE PROFILE OVERLAP FEATURES
 
@@ -215,6 +263,7 @@ def main():
     if long_unnormalized_output_file is not None:
         long_result = []
         long_result += depth_result
+        long_result += emd_result
 
         pd.DataFrame(long_result).to_csv(long_unnormalized_output_file)
 

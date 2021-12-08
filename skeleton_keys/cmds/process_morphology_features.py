@@ -130,9 +130,9 @@ def main():
     swc_paths_file = module.args["swc_paths_file"]
     if swc_paths_file is not None:
         with open(swc_paths_file, "r") as f:
-            swc_paths = json.load(swc_paths_file)
+            swc_paths = json.load(f)
         # ensure IDs are ints
-        swc_paths = {int(k): v for k, v in swc_paths}
+        swc_paths = {int(k): v for k, v in swc_paths.items()}
     else:
         swc_paths = swc_paths_from_database(specimen_ids)
 

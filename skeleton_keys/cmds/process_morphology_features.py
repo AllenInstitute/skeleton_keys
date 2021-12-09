@@ -7,6 +7,7 @@ from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
     apply_loadings_to_profiles,
     earthmover_distance_between_compartments,
+    overlap_between_compartments
 )
 
 
@@ -80,20 +81,10 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         allow_none=True,
         description="Output file to save apical dendrite depth profile loadings",
     )
-    long_unnormalized_output_file = ags.fields.OutputFile(
+    output_file = ags.fields.OutputFile(
         default=None,
         allow_none=True,
         description="Long-form CSV of un-normalized features",
-    )
-    wide_normalized_output_file = ags.fields.OutputFile(
-        default=None,
-        allow_none=True,
-        description="Wide-form CSV of normalized features",
-    )
-    wide_unnormalized_output_file = ags.fields.OutputFile(
-        default=None,
-        allow_none=True,
-        description="Wide-form CSV of un-normalized features",
     )
 
 
@@ -215,59 +206,65 @@ def main():
                         "value": transformed[i, j],
                     })
 
-    # Analyze earthmover distances between depth profiles
-    emd_result = []
+    # determine pairs of compartments to compare
+    profile_comparison_pairs = []
     if analyze_axon_flag and analyze_apical_flag:
-        axon_apical_emd_df = earthmover_distance_between_compartments(
-            axon_depth_df, apical_depth_df)
-        for r in axon_apical_emd_df.itertuples():
-            emd_result.append({
-                "specimen_id": r.Index,
-                "feature": "emd_with_apical_dendrite",
-                "compartment_type": "axon",
-                "dimension": "none",
-                "value": r.emd,
-            })
-
+        profile_comparison_pairs.append(
+            ("axon", "apical_dendrite", axon_depth_df, apical_depth_df)
+        )
     if analyze_axon_flag and analyze_basal_flag:
-        axon_basal_emd_df = earthmover_distance_between_compartments(
-            axon_depth_df, basal_depth_df)
-        for r in axon_basal_emd_df.itertuples():
-            emd_result.append({
-                "specimen_id": r.Index,
-                "feature": "emd_with_basal_dendrite",
-                "compartment_type": "axon",
-                "dimension": "none",
-                "value": r.emd,
-            })
-
+        profile_comparison_pairs.append(
+            ("axon", "basal_dendrite", axon_depth_df, basal_depth_df)
+        )
     if analyze_apical_flag and analyze_basal_flag:
-        apical_basal_emd_df = earthmover_distance_between_compartments(
-            apical_depth_df, basal_depth_df)
-        for r in apical_basal_emd_df.itertuples():
-            emd_result.append({
+        profile_comparison_pairs.append(
+            ("apical_dendrite", "basal_dendrite", apical_depth_df, basal_depth_df)
+        )
+
+    # Analyze earthmover distances and overlap between depth profiles
+    profile_comparison_result = []
+    for name_a, name_b, df_a, df_b in profile_comparison_pairs:
+        emd_df = earthmover_distance_between_compartments(df_a, df_b)
+        for r in emd_df.itertuples():
+            profile_comparison_result.append({
                 "specimen_id": r.Index,
-                "feature": "emd_with_basal_dendrite",
-                "compartment_type": "apical_dendrite",
+                "feature": f"emd_with_{name_b}",
+                "compartment_type": name_a,
                 "dimension": "none",
                 "value": r.emd,
             })
-
-    # TODO: ANALYZE PROFILE OVERLAP FEATURES
+        overlap_a_b_df = overlap_between_compartments(df_a, df_b)
+        for r in overlap_a_b_df.itertuples():
+            r_dict = r._asdict()
+            for feature in ("frac_above", "frac_intersect", "frac_below"):
+                profile_comparison_result.append({
+                    "specimen_id": r.Index,
+                    "feature": f"{feature}_{name_b}",
+                    "compartment_type": name_a,
+                    "dimension": "none",
+                    "value": r_dict[feature],
+                })
+        overlap_b_a_df = overlap_between_compartments(df_b, df_a)
+        for r in overlap_b_a_df.itertuples():
+            for feature in ("frac_above", "frac_intersect", "frac_below"):
+                r_dict = r._asdict()
+                profile_comparison_result.append({
+                    "specimen_id": r.Index,
+                    "feature": f"{feature}_{name_a}",
+                    "compartment_type": name_b,
+                    "dimension": "none",
+                    "value": r_dict[feature],
+                })
 
     # TODO: ANALYZE REST OF MORPH FEATURES
 
     # Save features to CSV
+    long_result = []
+    long_result += depth_result
+    long_result += profile_comparison_result
 
-    long_unnormalized_output_file = module.args['long_unnormalized_output_file']
-    if long_unnormalized_output_file is not None:
-        long_result = []
-        long_result += depth_result
-        long_result += emd_result
-
-        pd.DataFrame(long_result).to_csv(long_unnormalized_output_file)
-
-    # TODO: SAVE WIDE FORMAT VERSIONS OF OUTPUTS
+    output_file = module.args['output_file']
+    pd.DataFrame(long_result).to_csv(output_file)
 
 
 if __name__ == "__main__":

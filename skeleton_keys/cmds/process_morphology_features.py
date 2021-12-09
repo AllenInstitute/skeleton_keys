@@ -2,13 +2,27 @@ import json
 import argschema as ags
 import numpy as np
 import pandas as pd
-from skeleton_keys.database_queries import swc_paths_from_database
+from multiprocessing import Pool
+from functools import partial
+from skeleton_keys.database_queries import (
+    swc_paths_from_database,
+    shrinkage_factor_from_database,
+    pia_wm_soma_from_database,
+)
 from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
     apply_loadings_to_profiles,
     earthmover_distance_between_compartments,
-    overlap_between_compartments
+    overlap_between_compartments,
 )
+from skeleton_keys.feature_definition import default_features
+from skeleton_keys.upright import upright_corrected_morph
+from neuron_morphology.swc_io import morphology_from_swc
+from neuron_morphology.feature_extractor.data import Data
+from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor
+from neuron_morphology.feature_extractor.utilities import unnest
+from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import run_streamlines
+from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 
 
 class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
@@ -19,10 +33,6 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         default=None,
         allow_none=True,
         description="optional - JSON file with swc file paths keyed on specimen IDs",
-    )
-    already_transformed = ags.fields.Boolean(
-        default=False,
-        description="Whether SWC files have already been transformed (uprighted, corrected for shrinkage & tilt)",
     )
     aligned_depth_profile_file = ags.fields.InputFile(
         description="CSV file with layer-aligned depth profile information",
@@ -109,6 +119,154 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
         out_df.to_csv(output_file, header=False, index=False)
 
     return transformed
+
+
+def specimen_morph_features(
+    specimen_id,
+    swc_path,
+    layer_list,
+    analyze_axon,
+    analyze_apical_dendrite,
+    analyze_basal_dendrite
+    ):
+
+    # Load the morphology and transform if necessary
+    morph = morphology_from_swc(swc_path)
+
+    cell_data = Data(morphology=morph)
+    fe = FeatureExtractor()
+    fe.register_features(default_features())
+    fe_results = fe.extract(cell_data)
+
+    # Determine compartments from which to keep features
+    compartments = []
+    if analyze_axon:
+        compartments.append("axon")
+    if analyze_basal_dendrite:
+        compartments.append("basal_dendrite")
+    if analyze_apical_dendrite:
+        compartments.append("apical_dendrite")
+
+    # Define logic for which features to keep or handle specially
+    unchanged_features = [
+        "num_branches",
+        "max_branch_order",
+        "total_length",
+        "max_euclidean_distance",
+        "max_path_distance",
+        "mean_contraction",
+    ]
+    dendrite_only_features = [
+        "total_surface_area",
+        "mean_diameter",
+        "calculate_number_of_stems",
+    ]
+
+    # Unpack the data structure from the neuron_morphology feature extractor
+    # to put features in format for output; handle special cases
+    result_list = []
+    long_results = unnest(fe_results.results)
+    for fullname, value in long_results.items():
+        split_name = fullname.split(".")
+        compartment_name = split_name[0]
+        if compartment_name not in compartments:
+            continue
+
+        primary_feature = split_name[1]
+        result = {
+            "specimen_id": specimen_id,
+            "feature": primary_feature,
+            "compartment_type": compartment_name,
+        }
+        if primary_feature in unchanged_features:
+            result["dimension"] = "none"
+            result["value"] = value
+            result_list.append(result)
+        elif primary_feature == "soma_percentile":
+            # soma percentile returned as a 2-tuple; split them into
+            # separate entries for x & y
+            result_x = result.copy()
+            result_x["dimension"] = "x"
+            result_x["value"] = value[0]
+
+            result_y = result.copy()
+            result_y["dimension"] = "y"
+            result_y["value"] = value[1]
+            result_list += [result_x, result_y]
+        elif primary_feature in dendrite_only_features and compartment_name in ("basal_dendrite", "apical_dendrite"):
+            result["dimension"] = "none"
+            result["value"] = value
+            result_list.append(result)
+        elif primary_feature == "node":
+            if len(split_name) >= 4:
+                if split_name[2] == "dimension" and split_name[3] == "bias_xyz":
+                    result["feature"] = "bias"
+                    result_x = result.copy()
+                    result_x["dimension"] = "x"
+                    result_x["value"] = value[0]
+
+                    result_y = result.copy()
+                    result_y["dimension"] = "y"
+                    result_y["value"] = value[1]
+                    result_list += [result_x, result_y]
+                elif split_name[2] == "dimension" and split_name[3] == "width":
+                    result["feature"] = "extent"
+                    result["dimension"] = "x"
+                    result["value"] = value
+                    result_list.append(result)
+                elif split_name[2] == "dimension" and split_name[3] == "height":
+                    result["feature"] = "extent"
+                    result["dimension"] = "y"
+                    result["value"] = value
+                    result_list.append(result)
+
+    if "basal_dendrite.calculate_stem_exit_and_distance" in long_results:
+        stem_info = long_results["basal_dendrite.calculate_stem_exit_and_distance"]
+        total_stems = len(stem_info)
+        down = 0
+        side = 0
+        up = 0
+        for theta, distance in stem_info:
+            if theta <= 1 / 3:
+                down += 1
+            elif theta <= 2 / 3:
+                side += 1
+            else:
+                up += 1
+        for val, dim in zip((down, side, up), ("down", "side", "up")):
+            result_list.append({
+                "specimen_id": specimen_id,
+                "feature": "stem_exit",
+                "compartment_type": "basal_dendrite",
+                "dimension": dim,
+                "value": val / total_stems,
+            })
+
+    if "axon.calculate_stem_exit_and_distance" in long_results:
+        # find closest one
+        closest_distance = np.inf
+        closest_theta = 0
+        for theta, distance in long_results["axon.calculate_stem_exit_and_distance"]:
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_theta = theta
+
+        result_list.append({
+            "specimen_id": specimen_id,
+            "feature": "exit_theta",
+            "compartment_type": "axon",
+            "dimension": "none",
+            "value": closest_theta,
+        })
+        result_list.append({
+            "specimen_id": specimen_id,
+            "feature": "exit_distance",
+            "compartment_type": "axon",
+            "dimension": "none",
+            "value": closest_distance,
+        })
+
+    return result_list
 
 
 def main():
@@ -256,12 +414,24 @@ def main():
                     "value": r_dict[feature],
                 })
 
-    # TODO: ANALYZE REST OF MORPH FEATURES
+    # Analyze rest of morphological features of cell
+    map_input = [(
+        specimen_id,
+        swc_paths[specimen_id],
+        module.args['layer_list'],
+        analyze_axon_flag,
+        analyze_apical_flag,
+        analyze_basal_flag
+        ) for specimen_id in specimen_ids]
+    pool = Pool()
+    morph_results = pool.starmap(specimen_morph_features, map_input)
 
     # Save features to CSV
     long_result = []
     long_result += depth_result
     long_result += profile_comparison_result
+    for res in morph_results:
+        long_result += res
 
     output_file = module.args['output_file']
     pd.DataFrame(long_result).to_csv(output_file)

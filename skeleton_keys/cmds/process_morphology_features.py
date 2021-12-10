@@ -301,7 +301,7 @@ def main(args):
     # Load soma depths
     aligned_soma_file = args["aligned_soma_file"]
     soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
-    soma_loc_res = soma_locations(soma_loc_df.loc[df.index, :])
+    soma_loc_res = soma_locations(soma_loc_df.loc[soma_loc_df.index.intersection(specimen_ids), :])
 
     # Load depth profiles
     aligned_depth_profile_file = args['aligned_depth_profile_file']

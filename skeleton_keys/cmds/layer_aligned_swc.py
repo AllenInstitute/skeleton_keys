@@ -202,6 +202,11 @@ def main(args):
     morphology_to_swc(aligned_morph, output_file)
 
 
+def console_script():
+    module = ags.ArgSchemaParser(schema_type=LayerAlignedSwcSchema)
+    main(module.args)
+
+
 if __name__ == "__main__":
     module = ags.ArgSchemaParser(schema_type=LayerAlignedSwcSchema)
     main(module.args)

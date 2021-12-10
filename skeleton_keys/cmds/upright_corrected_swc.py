@@ -63,12 +63,6 @@ def main(args):
     if swc_path is None:
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
-    # Load the reference layer depths
-    with open(args["layer_depths_file"], "r") as f:
-        avg_layer_depths = json.load(f)
-
-    layer_list = args["layer_list"]
-
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
     if surface_and_layers_file is not None:

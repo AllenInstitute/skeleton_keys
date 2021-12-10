@@ -18,15 +18,15 @@ git@github.com:AllenInstitute/neuron_morphology.git
 
 
 clone source
-navigate to source directory 
+navigate to source directory
 pip install .
 
 Conda
 -----
-some environment files are provided to help ease install 
+some environment files are provided to help ease install
 
 For Mac 10.15 (Catalina) this python 3.8 environment was tested in December 2021.
-To create an environment with it. 
+To create an environment with it.
 
     conda create -n ENV_NAME -f mac_10.15_py3.8_environment.yml
 
@@ -36,9 +36,9 @@ After installation the following console scripts will be available to run from t
 
 skelekeys-layer-aligned-swc
 ----------------------------
-script to take an swc file, a polygon definition, a common layer cortical boundary file and produce a swc file that has been remapped to a common layer boundaries. 
+script to take an swc file, a polygon definition, a common layer cortical boundary file and produce a swc file that has been remapped to common layer boundaries.
 
-depth_profiles_from_aligned_swcs
+skelekeys-profiles-from-swcs
 --------------------------------
 script to take an directory of swc files, a common layer boundary file and return layer histogram file and a soma position file for the cells
 

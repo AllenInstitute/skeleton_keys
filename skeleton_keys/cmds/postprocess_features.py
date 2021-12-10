@@ -38,7 +38,7 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
             for text in re.split(_nsre, s)]
 
 
-def main():
+def main(args):
     df_list = []
     for filename in args["input_files"]:
         df = pd.read_csv(filename, index_col=0)

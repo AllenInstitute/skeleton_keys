@@ -98,6 +98,20 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
     )
 
 
+def soma_locations(df):
+    """Obtain soma locations from DataFrame"""
+    res = []
+    for i, r in df.itertuples():
+        res.append({
+            "specimen_id": i,
+            "feature": "aligned_dist_from_pia",
+            "compartment_type": "soma",
+            "dimension": "none",
+            "value": r,
+        })
+    return res
+
+
 def select_and_convert_depth_columns(df, prefix):
     """Select columns from depth profile DataFrame with particular prefix"""
     new_df = df.loc[:, df.columns.str.startswith(prefix)].copy()
@@ -284,6 +298,11 @@ def main(args):
     else:
         swc_paths = swc_paths_from_database(specimen_ids)
 
+    # Load soma depths
+    aligned_soma_file = args["aligned_soma_file"]
+    soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
+    soma_loc_res = soma_locations(soma_loc_df.loc[df.index, :])
+
     # Load depth profiles
     aligned_depth_profile_file = args['aligned_depth_profile_file']
     depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
@@ -426,6 +445,7 @@ def main(args):
 
     # Save features to CSV
     long_result = []
+    long_result += soma_loc_res
     long_result += depth_result
     long_result += profile_comparison_result
     for res in morph_results:

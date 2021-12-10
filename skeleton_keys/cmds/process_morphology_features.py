@@ -23,7 +23,7 @@ from neuron_morphology.feature_extractor.feature_extractor import FeatureExtract
 from neuron_morphology.feature_extractor.utilities import unnest
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import run_streamlines
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
-
+import os
 
 class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
     specimen_id_file = ags.fields.InputFile(
@@ -34,6 +34,11 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         allow_none=True,
         description="optional - JSON file with swc file paths keyed on specimen IDs",
     )
+    swc_dir = ags.fields.InputDir(
+        default=None,
+        allow_none=True,
+        description= "optional - folder to find swc files, assuming specimen_id.swc is filename")
+
     aligned_depth_profile_file = ags.fields.InputFile(
         description="CSV file with layer-aligned depth profile information",
     )
@@ -290,18 +295,21 @@ def main(args):
 
     # Get paths to SWC files
     swc_paths_file = args["swc_paths_file"]
+    swc_dir = args['swc_dir']
     if swc_paths_file is not None:
         with open(swc_paths_file, "r") as f:
             swc_paths = json.load(f)
         # ensure IDs are ints
         swc_paths = {int(k): v for k, v in swc_paths.items()}
+    elif swc_dir is not None:
+        swc_paths = {k:os.path.join(swc_dir, f'{k}.swc') for k in specimen_ids}
     else:
         swc_paths = swc_paths_from_database(specimen_ids)
 
     # Load soma depths
     aligned_soma_file = args["aligned_soma_file"]
     soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
-    soma_loc_res = soma_locations(soma_loc_df.loc[df.index, :])
+    soma_loc_res = soma_locations(soma_loc_df.loc[soma_loc_df.index, :])
 
     # Load depth profiles
     aligned_depth_profile_file = args['aligned_depth_profile_file']

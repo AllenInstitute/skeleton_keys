@@ -36,7 +36,7 @@ After installation the following console scripts will be available to run from t
 
 skelekeys-layer-aligned-swc
 ----------------------------
-script to take an swc file, a polygon definition, a common layer cortical boundary file and produce a swc file that has been remapped to a common layer. 
+script to take an swc file, a polygon definition, a common layer cortical boundary file and produce a swc file that has been remapped to a common layer boundaries. 
 
 depth_profiles_from_aligned_swcs
 --------------------------------

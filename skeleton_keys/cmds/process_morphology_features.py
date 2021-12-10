@@ -269,15 +269,13 @@ def specimen_morph_features(
     return result_list
 
 
-def main():
-    module = ags.ArgSchemaParser(schema_type=ProcessMorphologyFeaturesParameters)
-
+def main(args):
     # Load specimen IDs
-    specimen_id_file = module.args["specimen_id_file"]
+    specimen_id_file = args["specimen_id_file"]
     specimen_ids = np.loadtxt(specimen_id_file).astype(int)
 
     # Get paths to SWC files
-    swc_paths_file = module.args["swc_paths_file"]
+    swc_paths_file = args["swc_paths_file"]
     if swc_paths_file is not None:
         with open(swc_paths_file, "r") as f:
             swc_paths = json.load(f)
@@ -287,14 +285,14 @@ def main():
         swc_paths = swc_paths_from_database(specimen_ids)
 
     # Load depth profiles
-    aligned_depth_profile_file = module.args['aligned_depth_profile_file']
+    aligned_depth_profile_file = args['aligned_depth_profile_file']
     depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
 
     # Compartment analysis flags
-    analyze_axon_flag = module.args['analyze_axon']
-    analyze_basal_flag = module.args['analyze_basal_dendrite']
-    analyze_apical_flag = module.args['analyze_apical_dendrite']
-    analyze_basal_dendrite_depth_flag = module.args['analyze_basal_dendrite_depth']
+    analyze_axon_flag = args['analyze_axon']
+    analyze_basal_flag = args['analyze_basal_dendrite']
+    analyze_apical_flag = args['analyze_apical_dendrite']
+    analyze_basal_dendrite_depth_flag = args['analyze_basal_dendrite_depth']
 
     # Analyze depth profiles
     # Assumes that depth profile file has columns in the format:
@@ -310,8 +308,8 @@ def main():
         available_ids = axon_depth_df.index.intersection(specimen_ids)
         transformed = analyze_depth_profiles(
             axon_depth_df.loc[available_ids, :],
-            module.args["axon_depth_profile_loadings_file"],
-            module.args["save_axon_depth_profile_loadings_file"]
+            args["axon_depth_profile_loadings_file"],
+            args["save_axon_depth_profile_loadings_file"]
         )
         for i, sp_id in enumerate(specimen_ids):
             for j in range(transformed.shape[1]):
@@ -328,8 +326,8 @@ def main():
         available_ids = apical_depth_df.index.intersection(specimen_ids)
         transformed = analyze_depth_profiles(
             apical_depth_df.loc[available_ids, :],
-            module.args["apical_dendrite_depth_profile_loadings_file"],
-            module.args["save_apical_dendrite_depth_profile_loadings_file"]
+            args["apical_dendrite_depth_profile_loadings_file"],
+            args["save_apical_dendrite_depth_profile_loadings_file"]
         )
         for i, sp_id in enumerate(specimen_ids):
             for j in range(transformed.shape[1]):
@@ -351,8 +349,8 @@ def main():
             available_ids = basal_depth_df.index.intersection(specimen_ids)
             transformed = analyze_depth_profiles(
                 basal_depth_df.loc[available_ids, :],
-                module.args["basal_dendrite_depth_profile_loadings_file"],
-                module.args["save_basal_dendrite_depth_profile_loadings_file"]
+                args["basal_dendrite_depth_profile_loadings_file"],
+                args["save_basal_dendrite_depth_profile_loadings_file"]
             )
             for i, sp_id in enumerate(available_ids):
                 for j in range(transformed.shape[1]):
@@ -418,7 +416,7 @@ def main():
     map_input = [(
         specimen_id,
         swc_paths[specimen_id],
-        module.args['layer_list'],
+        args['layer_list'],
         analyze_axon_flag,
         analyze_apical_flag,
         analyze_basal_flag
@@ -433,9 +431,15 @@ def main():
     for res in morph_results:
         long_result += res
 
-    output_file = module.args['output_file']
+    output_file = args['output_file']
     pd.DataFrame(long_result).to_csv(output_file)
 
 
+def console_script():
+    module = ags.ArgSchemaParser(schema_type=ProcessMorphologyFeaturesParameters)
+    main(module.args)
+
+
 if __name__ == "__main__":
-    main()
+    module = ags.ArgSchemaParser(schema_type=ProcessMorphologyFeaturesParameters)
+    main(module.args)

@@ -39,18 +39,16 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 
 
 def main():
-    module = ags.ArgSchemaParser(schema_type=PostprocessFeaturesParameters)
-
     df_list = []
-    for filename in module.args["input_files"]:
+    for filename in args["input_files"]:
         df = pd.read_csv(filename, index_col=0)
         df_list.append(df)
 
     morph_df = pd.concat(df_list)
 
-    drop_stem_exit = module.args["drop_stem_exit"]
-    drop_bifurcation_angle = module.args["drop_bifurcation_angle"]
-    drop_apical_n_stems = module.args["drop_apical_n_stems"]
+    drop_stem_exit = args["drop_stem_exit"]
+    drop_bifurcation_angle = args["drop_bifurcation_angle"]
+    drop_apical_n_stems = args["drop_apical_n_stems"]
 
     if drop_stem_exit:
         mask = ((morph_df["feature"].str.startswith("stem_exit")))
@@ -72,10 +70,12 @@ def main():
                                    "compartment_type",
                                    "dimension"]).sort_index().unstack(["feature", "compartment_type", "dimension"])
 
+    print(morph_pt.shape)
     print(morph_pt.head())
 
     # Find and drop cells that have nans for values
     null_rows = morph_pt.isnull().any(axis=1)
+    print(null_rows)
     if np.sum(null_rows) > 0:
         logging.warning("Found cells with nan values; dropping cells")
         null_cols = morph_pt.isnull().any(axis=0)
@@ -107,18 +107,24 @@ def main():
                                      morph_pt.columns.get_level_values(3))]
     labs = [l.replace("_none", "") for l in labs]
 
-    output_normalized_file = module.args["wide_normalized_output_file"]
+    output_normalized_file = args["wide_normalized_output_file"]
     morph_pt_norm_export = morph_pt_norm.copy()
     morph_pt_norm_export.columns = labs
     morph_pt_norm_export = morph_pt_norm_export[sorted(labs, key=_natural_sort_key)]
     morph_pt_norm_export.to_csv(output_normalized_file)
 
-    output_raw_file = module.args["wide_unnormalized_output_file"]
+    output_raw_file = args["wide_unnormalized_output_file"]
     morph_pt_raw_export = morph_pt.copy()
     morph_pt_raw_export.columns = labs
     morph_pt_raw_export = morph_pt_raw_export[sorted(labs, key=_natural_sort_key)]
     morph_pt_raw_export.to_csv(output_raw_file)
 
 
+def console_script():
+    module = ags.ArgSchemaParser(schema_type=PostprocessFeaturesParameters)
+    main(module.args)
+
+
 if __name__ == "__main__":
-    main()
+    module = ags.ArgSchemaParser(schema_type=PostprocessFeaturesParameters)
+    main(module.args)

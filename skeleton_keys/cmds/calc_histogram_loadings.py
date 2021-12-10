@@ -56,19 +56,6 @@ def main(args):
     specimen_id_file = args["specimen_id_file"]
     specimen_ids = np.loadtxt(specimen_id_file).astype(int)
 
-    # Get paths to SWC files
-    swc_paths_file = args["swc_paths_file"]
-    swc_dir = args["swc_dir"]
-    if swc_paths_file is not None:
-        with open(swc_paths_file, "r") as f:
-            swc_paths = json.load(f)
-        # ensure IDs are ints
-        swc_paths = {int(k): v for k, v in swc_paths.items()}
-    elif swc_dir is not None:
-        swc_paths = {k: os.path.join(swc_dir, f"{k}.swc") for k in specimen_ids}
-    else:
-        swc_paths = swc_paths_from_database(specimen_ids)
-
     # Load depth profiles
     aligned_depth_profile_file = args["aligned_depth_profile_file"]
     depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)

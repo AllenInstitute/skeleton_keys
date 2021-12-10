@@ -3,10 +3,16 @@ import numpy as np
 import pandas as pd
 import argschema as ags
 from neuron_morphology.swc_io import morphology_from_swc, morphology_to_swc
-from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import run_streamlines
+from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
+    run_streamlines,
+)
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 from neuron_morphology.transforms.affine_transform import (
-    rotation_from_angle, affine_from_transform_translation, affine_from_translation, AffineTransform)
+    rotation_from_angle,
+    affine_from_transform_translation,
+    affine_from_translation,
+    AffineTransform,
+)
 from neuron_morphology.morphology import Morphology
 from skeleton_keys.database_queries import (
     query_for_image_series_id,
@@ -29,9 +35,7 @@ from skeleton_keys.layer_alignment import layer_aligned_y_values
 class LayerAlignedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")
     swc_path = ags.fields.InputFile(
-        description="path to SWC file (optional)",
-        default=None,
-        allow_none=True
+        description="path to SWC file (optional)", default=None, allow_none=True
     )
     layer_depths_file = ags.fields.InputFile(default="avg_layer_depths.json")
     output_file = ags.fields.OutputFile(default="output.swc")
@@ -46,7 +50,7 @@ class LayerAlignedSwcSchema(ags.ArgSchema):
     surface_and_layers_file = ags.fields.InputFile(
         description="JSON file with surface and layer polygon paths",
         default=None,
-        allow_none=True
+        allow_none=True,
     )
     closest_surface_voxel_file = ags.fields.InputFile(
         default=None,
@@ -58,30 +62,30 @@ class LayerAlignedSwcSchema(ags.ArgSchema):
         allow_none=True,
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",
     )
-    layer_list = ags.fields.List(ags.fields.String,
+    layer_list = ags.fields.List(
+        ags.fields.String,
         description="List of layer names in order",
         default=["Layer1", "Layer2/3", "Layer4", "Layer5", "Layer6a", "Layer6b"],
-        cli_as_single_argument=True
+        cli_as_single_argument=True,
     )
 
 
-def main():
-    module = ags.ArgSchemaParser(schema_type=LayerAlignedSwcSchema)
+def main(args):
 
     # Get the path to the SWC file
-    specimen_id = module.args["specimen_id"]
-    swc_path = module.args["swc_path"]
+    specimen_id = args["specimen_id"]
+    swc_path = args["swc_path"]
     if swc_path is None:
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
     # Load the reference layer depths
-    with open(module.args["layer_depths_file"], "r") as f:
+    with open(args["layer_depths_file"], "r") as f:
         avg_layer_depths = json.load(f)
 
-    layer_list = module.args["layer_list"]
+    layer_list = args["layer_list"]
 
     # Get pia, white matter, soma, and layers
-    surface_and_layers_file = module.args["surface_and_layers_file"]
+    surface_and_layers_file = args["surface_and_layers_file"]
     if surface_and_layers_file is not None:
         with open(surface_and_layers_file, "r") as f:
             surfaces_and_paths = json.load(f)
@@ -94,7 +98,9 @@ def main():
         imser_id = query_for_image_series_id(specimen_id)
 
         # Query for pia, white matter, and soma
-        pia_surface, wm_surface, soma_drawing = pia_wm_soma_from_database(specimen_id, imser_id)
+        pia_surface, wm_surface, soma_drawing = pia_wm_soma_from_database(
+            specimen_id, imser_id
+        )
 
         # Query for layers
         layer_polygons = layer_polygons_from_database(imser_id)
@@ -119,19 +125,19 @@ def main():
     upright_angle = get_upright_angle(gradient_field)
 
     # Correct for shrinkage and/or slice angle if requested
-    if module.args["correct_for_shrinkage"] or module.args["correct_for_slice_angle"]:
-        if module.args["correct_for_shrinkage"]:
+    if args["correct_for_shrinkage"] or args["correct_for_slice_angle"]:
+        if args["correct_for_shrinkage"]:
             shrink_factor = shrinkage_factor_from_database(morph, specimen_id)
         else:
             shrink_factor = 1
 
-        if module.args["correct_for_slice_angle"]:
+        if args["correct_for_slice_angle"]:
             pin_df = pd.DataFrame.from_records(query_pinning_info())
             slice_angle = slice_angle_tilt(
                 pin_df,
                 specimen_id,
-                module.args["closest_surface_voxel_file"],
-                module.args["surface_paths_file"],
+                args["closest_surface_voxel_file"],
+                args["surface_paths_file"],
             )
             flip_status = determine_flip_switch(morph, specimen_id)
 
@@ -140,37 +146,38 @@ def main():
             flip_status = 1
 
         morph = corrected_without_uprighting_morph(
-            morph,
-            upright_angle,
-            slice_angle,
-            flip_status,
-            shrink_factor
+            morph, upright_angle, slice_angle, flip_status, shrink_factor
         )
 
     # align morph to depth field
     # depth field is centered at origin
     soma_morph = morph.get_soma()
-    translation_to_origin = np.array([-soma_morph['x'], -soma_morph["y"], 0])
+    translation_to_origin = np.array([-soma_morph["x"], -soma_morph["y"], 0])
     translation_affine = affine_from_translation(translation_to_origin)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)
 
     # snap together hand-drawn layer borders and determine pia/wm sides
     snapped_polys_surfs = snap_hand_drawn_polygons(
-        layer_polygons, pia_surface, wm_surface, layer_list)
+        layer_polygons, pia_surface, wm_surface, layer_list
+    )
 
     # convert to micron scale and translate to soma-centered depth field
     snapped_polys_surfs = convert_and_translate_snapped_to_microns(
-        snapped_polys_surfs, resolution, translation)
+        snapped_polys_surfs, resolution, translation
+    )
 
     # get aligned y-values for morph
     print("Calculating layer-aligned depths for all points")
-    y_value_info = layer_aligned_y_values(morph, avg_layer_depths,
-        depth_field, gradient_field, snapped_polys_surfs)
+    y_value_info = layer_aligned_y_values(
+        morph, avg_layer_depths, depth_field, gradient_field, snapped_polys_surfs
+    )
 
     # upright the morphology
     rotation_upright_matrix = rotation_from_angle(upright_angle, axis=2)
-    rotation_upright_affine = affine_from_transform_translation(transform=rotation_upright_matrix)
+    rotation_upright_affine = affine_from_transform_translation(
+        transform=rotation_upright_matrix
+    )
     T_rotate = AffineTransform(rotation_upright_affine)
     upright_morph = T_rotate.transform_morphology(morph)
 
@@ -186,14 +193,15 @@ def main():
     # build new morphology from reassigned nodes
     aligned_morph = Morphology(
         node_list,
-        node_id_cb=lambda node: node['id'],
-        parent_id_cb=lambda node: node['parent']
+        node_id_cb=lambda node: node["id"],
+        parent_id_cb=lambda node: node["parent"],
     )
 
     # save to swc
-    output_file = module.args["output_file"]
+    output_file = args["output_file"]
     morphology_to_swc(aligned_morph, output_file)
 
 
 if __name__ == "__main__":
-	main()
+    module = ags.ArgSchemaParser(schema_type=LayerAlignedSwcSchema)
+    main(module.args)

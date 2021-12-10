@@ -3,6 +3,9 @@ import shapely
 import shapely.vectorized
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+from shapely.geometry import LineString
+from typing import Dict, List, Tuple, Optional
+from neuron_morphology.layered_point_depths.__main__ import tuplize
 
 
 def layer_aligned_y_values(morph, avg_layer_depths,
@@ -216,3 +219,70 @@ def setup_interpolator_without_nan(field, dim, **kwargs):
             values[nz_inds[-1] + 1:, j] = values[nz_inds[-1], j]
 
     return RegularGridInterpolator(coords, values, **kwargs)
+
+
+def path_dist_from_node(
+    pos: Tuple[float, float],
+    depth_interp: RegularGridInterpolator,
+    dx_interp: RegularGridInterpolator,
+    dy_interp: RegularGridInterpolator,
+    surface: LineString,
+    step_size: float,
+    max_iter: int,
+    adaptive_scale_factor: int = 32,
+) -> Optional[float]:
+    cur_pos = np.array(list(pos))
+    pos_list = [cur_pos]
+    adaptive_scale = adaptive_scale_factor
+    surf_df = geopandas.GeoDataFrame({"name": ['surf'], "geometry": [surface]})
+
+    for _ in range(max_iter):
+        dx = dx_interp(cur_pos)
+        dy = dy_interp(cur_pos)
+        base_step = np.squeeze([dx, dy])
+        base_step = base_step / np.linalg.norm(base_step)
+        step = step_size * adaptive_scale * base_step
+        next_pos = cur_pos + step
+
+        ray_list = [shapely.geometry.LineString([pos, tuple(next_pos)])]
+        ray_df = geopandas.GeoDataFrame({"ind": [0], "geometry": ray_list})
+        intersect_df = surf_df.sjoin(ray_df, how='inner', predicate='intersects')
+
+        # handle matches
+        for ind in intersect_df['ind']:
+            if adaptive_scale > 1:
+                # Reduce scale and try again from same point
+                adaptive_scale /= 2
+                next_pos = cur_pos
+                continue
+
+            ray = ray_df.set_index("ind").at[ind, "geometry"]
+            intersection = ray.intersection(surface)
+            if intersection.geom_type == "MultiPoint":
+                cur_pt = shapely.geometry.Point(cur_pos[ind, :])
+                dist = np.inf
+                for test_pt in intersection:
+                    test_dist = cur_pt.distance(test_pt)
+                    if test_dist < dist:
+                        dist = test_dist
+                        closest_pt = test_pt
+                intersection_pt = list(closest_pt.coords)
+            else:
+                intersection_pt = list(intersection.coords)
+
+            pos_list.append(np.array(intersection_pt))
+            return calculate_length_of_path_list(pos_list)
+
+        pos_list.append(next_pos)
+        cur_pos = next_pos
+
+    return None
+
+
+def calculate_length_of_path_list(path_list):
+    pos_arr = np.vstack(path_list)
+
+    deltas = np.diff(pos_arr, axis=0)
+    dists = np.sqrt((deltas ** 2).sum(axis=1))
+    total_dist = dists.sum()
+    return total_dist

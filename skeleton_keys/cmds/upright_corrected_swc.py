@@ -1,4 +1,5 @@
 import json
+import shapely
 import numpy as np
 import pandas as pd
 import argschema as ags
@@ -6,6 +7,7 @@ from neuron_morphology.swc_io import morphology_from_swc, morphology_to_swc
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
     run_streamlines,
 )
+from neuron_morphology.snap_polygons.geometries import Geometries
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle,
@@ -23,6 +25,11 @@ from skeleton_keys.database_queries import (
 )
 from skeleton_keys.slice_angle import slice_angle_tilt
 from skeleton_keys.upright import upright_corrected_morph
+from skeleton_keys.drawings import convert_and_translate_snapped_to_microns
+from skeleton_keys.layer_alignment import (
+    setup_interpolator_without_nan,
+    path_dist_from_node,
+)
 
 
 class UprightCorrectedSwcSchema(ags.ArgSchema):
@@ -54,6 +61,42 @@ class UprightCorrectedSwcSchema(ags.ArgSchema):
         allow_none=True,
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",
     )
+
+
+def soma_distance_from_pia(pia_surface, depth_field, gradient_field, translation):
+    """ Calculate the distance (in microns) from the soma to the pia """
+    # Create pia surface geometry
+    surfs = Geometries()
+    surfs.register_surface("pia", pia_surface["path"])
+    surfs = surfs.to_json()
+
+    # convert to micron scale and translate to soma-centered depth field
+    surfs = convert_and_translate_snapped_to_microns(
+        surfs, pia_surface['resolution'], translation)
+    surfs_dict = {s["name"]: shapely.geometry.LineString(s["path"]) for s in surfs["surfaces"]}
+
+    # Set up interpolators for navigating fields
+    depth_interp = setup_interpolator_without_nan(
+        depth_field, None, method="linear",
+        bounds_error=False, fill_value=None)
+    dx_interp = setup_interpolator_without_nan(
+        gradient_field, "dx", method="linear",
+        bounds_error=False, fill_value=None)
+    dy_interp = setup_interpolator_without_nan(
+        gradient_field, "dy", method="linear",
+        bounds_error=False, fill_value=None)
+
+    # Field is soma centered, so find the distance to pia from (0, 0)
+    soma_dist_to_pia = path_dist_from_node(
+        (0, 0),
+        depth_interp,
+        dx_interp,
+        dy_interp,
+        surfs_dict["pia"],
+        step_size=1.0,
+        max_iter=1000,
+    )
+    return soma_dist_to_pia
 
 
 def main(args):
@@ -131,6 +174,15 @@ def main(args):
         )
         T_rotate = AffineTransform(rotation_upright_affine)
         morph = T_rotate.transform_morphology(morph)
+
+    # Set to correct depth from pia
+    soma_dist_to_pia = soma_distance_from_pia(
+        pia_surface, depth_field, gradient_field, translation)
+
+    translation_for_soma = np.array([0, -soma_dist_to_pia, 0])
+    translation_affine = affine_from_translation(translation_for_soma)
+    T_translate = AffineTransform(translation_affine)
+    T_translate.transform_morphology(morph)
 
     # save to swc
     output_file = args["output_file"]

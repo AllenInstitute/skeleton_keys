@@ -7,7 +7,9 @@ WORKDIR /usr/local/src
 RUN git clone https://${GITHUB_TOKEN}@github.com/AllenInstitute/ccf_streamlines.git &&\
     pip install ./ccf_streamlines &&\
     rm -rf /usr/local/src/ccf_streamlines
-COPY . /usr/local/src/skeleton_keys
 WORKDIR /usr/local/src/skeleton_keys
-RUN pip install .
-
+COPY setup.cfg  /usr/local/src/skeleton_keys
+RUN python3 -c "import configparser; c = configparser.ConfigParser(); c.read('setup.cfg'); print(c['options']['install_requires'])" | xargs pip install
+COPY . /usr/local/src/skeleton_keys
+RUN python setup.py install
+ENV HDF5_DISABLE_VERSION_CHECK=1

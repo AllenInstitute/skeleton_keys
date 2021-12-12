@@ -2,7 +2,7 @@ import seaborn as sns
 import numpy as np
 
 
-def plot_cortical_cell(ax, sk, ld, title):
+def plot_cortical_cell(ax, sk, ld=None, title=None):
     """plot a cortical neuron according to ivscc style plot
 
     Args:
@@ -31,13 +31,32 @@ def plot_cortical_cell(ax, sk, ld, title):
         ax.set_aspect("equal")
     #     plt.gca().invert_yaxis()
 
-    depths = [k for k in ld.values()]
-    depths += [0.0]
-    depths = np.array(depths) * -1
+    if ld is not None:
+        depths = [k for k in ld.values()]
+        depths += [0.0]
+        depths = np.array(depths) * -1
 
-    ax.hlines(depths, xmin=-300, xmax=300, linestyles="dashed", color="gray")
-    ax.set_xlim(-300, 300)
+        ax.hlines(depths, xmin=-300, xmax=300, linestyles="dashed", color="gray")
+        ax.set_xlim(-300, 300)
     sns.despine(left=True, bottom=True)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title(title)
+    if title is not None:
+        ax.set_title(title)
+
+
+def plot_layer_polygon(ax, surfaces_and_paths):
+    pia_surface = surfaces_and_paths["pia_path"]
+    wm_surface = surfaces_and_paths["wm_path"]
+    soma_drawing = surfaces_and_paths["soma_path"]
+    layer_polygons = surfaces_and_paths["layer_polygons"]
+
+    path = np.array(pia_surface["path"]) * pia_surface["resolution"]
+    ax.plot(path[:, 0], path[:, 1])
+    path = np.array(wm_surface["path"]) * pia_surface["resolution"]
+    ax.plot(path[:, 0], path[:, 1])
+    path = np.array(soma_drawing["path"]) * pia_surface["resolution"]
+    ax.plot(path[:, 0], path[:, 1])
+    for poly in layer_polygons:
+        path = np.array(poly["path"]) * pia_surface["resolution"]
+        ax.plot(path[:, 0], path[:, 1])

@@ -1,14 +1,16 @@
 import seaborn as sns
+import numpy as np
+
 
 def plot_cortical_cell(ax, sk, ld, title):
     """plot a cortical neuron according to ivscc style plot
-   
+
     Args:
         ax (matplotlib.axes]): axes in which to put plot
         sk (allensdk.core.swc.Morphology): skeleton file read with allensdk
-          assumes the skeleton has negative y values which get more 
-          negative as the cell gets lower in cortex, and has 
-          compartment labels with soma as 2 
+          assumes the skeleton has negative y values which get more
+          negative as the cell gets lower in cortex, and has
+          compartment labels with soma as 2
         ld (dict): dictionary of layer depths, where values are positive
                    indicating how below pia (assumed to be at zero)
                    layers are, note will be inverted for plotting purposes
@@ -29,7 +31,7 @@ def plot_cortical_cell(ax, sk, ld, title):
         ax.set_aspect("equal")
     #     plt.gca().invert_yaxis()
 
-    depths =  [k for k in ld.values()]
+    depths = [k for k in ld.values()]
     depths += [0.0]
     depths = np.array(depths) * -1
 

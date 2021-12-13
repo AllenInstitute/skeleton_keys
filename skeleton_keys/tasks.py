@@ -36,6 +36,7 @@ def layer_align_cell(
         "surface_paths_file": surface_paths_file,
         "layer_list": layer_list,
     }
+    input_data = {k: v for k, v in input_data.items() if v is not None}
     module = argschema.ArgSchemaParser(
         schema_type=LayerAlignedSwcSchema, input_data=input_data, args=[]
     )
@@ -63,6 +64,7 @@ def upright_correct_cell(
         "closest_surface_voxel_file": closest_surface_voxel_file,
         "surface_paths_file": surface_paths_file,
     }
+    input_data = {k: v for k, v in input_data.items() if v is not None}
     module = argschema.ArgSchemaParser(
         schema_type=UprightCorrectedSwcSchema, input_data=input_data, args=[]
     )

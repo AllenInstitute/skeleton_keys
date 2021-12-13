@@ -153,7 +153,7 @@ def step_all_nodes(pos, depth_interp, dx_interp, dy_interp, surf, step_size, max
             if intersection.geom_type == "MultiPoint":
                 cur_pt = shapely.geometry.Point(cur_pos[ind, :])
                 dist = np.inf
-                for test_pt in intersection:
+                for test_pt in intersection.geoms:
                     test_dist = cur_pt.distance(test_pt)
                     if test_dist < dist:
                         dist = test_dist

@@ -30,6 +30,7 @@ from skeleton_keys.drawings import (
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.layer_alignment import layer_aligned_y_values
+from skeleton_keys.io import read_json_file
 
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
@@ -79,16 +80,15 @@ def main(args):
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
     # Load the reference layer depths
-    with open(args["layer_depths_file"], "r") as f:
-        avg_layer_depths = json.load(f)
+    avg_layer_depths = read_json_file(args["layer_depths_file"])
 
     layer_list = args["layer_list"]
 
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
     if surface_and_layers_file is not None:
-        with open(surface_and_layers_file, "r") as f:
-            surfaces_and_paths = json.load(f)
+        surfaces_and_paths = read_json_file(surface_and_layers_file)
+
         pia_surface = surfaces_and_paths["pia_path"]
         wm_surface = surfaces_and_paths["wm_path"]
         soma_drawing = surfaces_and_paths["soma_path"]

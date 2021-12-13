@@ -1,6 +1,14 @@
 import pandas as pd
+import cloudfiles
+import os
 
-
+def read_json_file(cloudpath):
+    if "://" not in cloudpath:
+        cloudpath = "file://" + cloudpath
+    folder,file = os.path.split(cloudpath)
+    cf = cloudfiles.CloudFiles(folder)
+    return cf.get_json(file)
+    
 def load_swc_as_dataframe(swc_file):
     """ Load a morphology SWC file into a pandas DataFrame.
 

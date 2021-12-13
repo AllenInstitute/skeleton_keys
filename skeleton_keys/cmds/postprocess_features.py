@@ -3,18 +3,19 @@ import re
 import numpy as np
 import pandas as pd
 import argschema as ags
-
+from skeleton_keys import cloudfields
+from skeleton_keys.io import read_json_file, 
 
 class PostprocessFeaturesParameters(ags.ArgSchema):
     input_files = ags.fields.List(
-        ags.fields.InputFile(),
+        cloudfields.InputFile(),
         cli_as_single_argument=True,
         description="Long-form CSV files of morphology features",
     )
-    wide_normalized_output_file = ags.fields.OutputFile(
+    wide_normalized_output_file = cloudfields.OutputFile(
         description="Wide-form CSV of normalized features",
     )
-    wide_unnormalized_output_file = ags.fields.OutputFile(
+    wide_unnormalized_output_file = cloudfields.OutputFile(
         description="Wide-form CSV of un-normalized features",
     )
 
@@ -41,7 +42,7 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 def main(args):
     df_list = []
     for filename in args["input_files"]:
-        df = pd.read_csv(filename, index_col=0)
+        df = pd.read_csv(read_bytes(filename), index_col=0)
         df_list.append(df)
 
     morph_df = pd.concat(df_list)

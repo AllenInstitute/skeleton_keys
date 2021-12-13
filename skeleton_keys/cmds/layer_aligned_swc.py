@@ -31,15 +31,15 @@ from skeleton_keys.drawings import (
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.layer_alignment import layer_aligned_y_values
 from skeleton_keys.io import read_json_file
-
+from skeleton_keys import cloudfields
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")
-    swc_path = ags.fields.InputFile(
+    swc_path = cloudfields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )
-    layer_depths_file = ags.fields.InputFile(default="avg_layer_depths.json")
-    output_file = ags.fields.OutputFile(default="output.swc")
+    layer_depths_file = cloudfields.InputFile(default="avg_layer_depths.json")
+    output_file = cloudfields.OutputFile(default="output.swc")
     correct_for_shrinkage = ags.fields.Boolean(
         default=True,
         description="Whether to correct for shrinkage",
@@ -48,17 +48,17 @@ class LayerAlignedSwcSchema(ags.ArgSchema):
         default=True,
         description="Whether to correct for slice angle",
     )
-    surface_and_layers_file = ags.fields.InputFile(
+    surface_and_layers_file = cloudfields.InputFile(
         description="JSON file with surface and layer polygon paths",
         default=None,
         allow_none=True,
     )
-    closest_surface_voxel_file = ags.fields.InputFile(
+    closest_surface_voxel_file = cloudfields.InputFile(
         default=None,
         allow_none=True,
         description="Closest surface voxel reference HDF5 file for slice angle calculation",
     )
-    surface_paths_file = ags.fields.InputFile(
+    surface_paths_file = cloudfields.InputFile(
         default=None,
         allow_none=True,
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",

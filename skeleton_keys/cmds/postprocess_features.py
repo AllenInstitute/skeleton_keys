@@ -70,9 +70,6 @@ def main(args):
                                    "compartment_type",
                                    "dimension"]).sort_index().unstack(["feature", "compartment_type", "dimension"])
 
-    print(morph_pt.shape)
-    print(morph_pt.head())
-
     # Find and drop cells that have nans for values
     null_rows = morph_pt.isnull().any(axis=1)
     print(null_rows)
@@ -90,7 +87,6 @@ def main(args):
         if "hist_pc" in feat:
             continue
         values = morph_pt.loc[:, idx[:, feat, :, :]].values
-        print(feat, len(values))
         scales[feat] = values.std()
         if scales[feat] == 0: # zero std dev leads to nans
             scales[feat] = 1e-12

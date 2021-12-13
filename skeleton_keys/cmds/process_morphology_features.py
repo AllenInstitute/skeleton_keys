@@ -3,11 +3,8 @@ import argschema as ags
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool
-from functools import partial
 from skeleton_keys.database_queries import (
-    swc_paths_from_database,
-    shrinkage_factor_from_database,
-    pia_wm_soma_from_database,
+    swc_paths_from_database
 )
 from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
@@ -16,15 +13,11 @@ from skeleton_keys.depth_profile import (
     overlap_between_compartments,
 )
 from skeleton_keys.feature_definition import default_features
-from skeleton_keys.upright import upright_corrected_morph
 from neuron_morphology.swc_io import morphology_from_swc
 from neuron_morphology.feature_extractor.data import Data
 from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor
 from neuron_morphology.feature_extractor.utilities import unnest
-from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
-    run_streamlines,
-)
-from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
+
 import os
 
 

@@ -1,14 +1,11 @@
-import json
 import argschema as ags
 import numpy as np
 import pandas as pd
-from skeleton_keys.database_queries import swc_paths_from_database
 
 from skeleton_keys.cmds.process_morphology_features import (
     select_and_convert_depth_columns,
     analyze_depth_profiles,
 )
-import os
 
 
 class CalcHistogramLoadingsParameters(ags.ArgSchema):

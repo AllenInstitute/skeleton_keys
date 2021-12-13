@@ -4,7 +4,7 @@ import marshmallow as mm
 import sys
 
 
-class CloudOutputFile(mm.fields.Str):
+class OutputFile(mm.fields.Str):
     """OutputFile :class:`marshmallow.fields.Str` subclass which is a path to a
        file location that can be written to by the current user
        (presently tested by opening a temporary file to that

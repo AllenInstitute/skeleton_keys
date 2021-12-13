@@ -5,7 +5,7 @@ import pandas as pd
 import json
 from skeleton_keys.io import load_swc_as_dataframe
 from skeleton_keys import cloudfields 
-from skeleton_keys.io import read_bytes
+from skeleton_keys.io import read_bytes, read_json_file
 
 class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
     specimen_id_file = cloudfields.InputFile(
@@ -36,8 +36,7 @@ def main():
 
     # Load the layer info
     layer_depths_file = module.args['layer_depths_file']
-    with open(layer_depths_file, "r") as f:
-        avg_layer_depths = json.load(f)
+    avg_layer_depths = read_json_file(layer_depths_file)
 
     # Get directory with layer-aligned SWCs
     swc_dir = module.args['swc_dir']

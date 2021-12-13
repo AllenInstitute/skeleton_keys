@@ -37,6 +37,12 @@ def write_dataframe_to_csv(df, path, **kwargs):
     buffer.seek(0)
     cf.put(file, buffer.getvalue(), content_type='application/x-csv')
 
+def write_json(data,path):
+    if "://" not in path:
+        path = "file://" + path
+    cloudpath, file = os.path.split(path)
+    cf = cloudfiles.CloudFiles(cloudpath)
+    cf.put_json(file, data)
     
 def load_swc_as_dataframe(swc_file):
     """ Load a morphology SWC file into a pandas DataFrame.

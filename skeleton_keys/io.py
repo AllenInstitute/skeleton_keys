@@ -38,8 +38,8 @@ def write_dataframe_to_csv(df, path, **kwargs):
     charset = "utf-8"
     wrapper = io.TextIOWrapper(buffer, encoding=charset)
     df.to_csv(wrapper, **kwargs)
-    buffer.seek(0)
-    cf.put(file, buffer.getvalue(), content_type="application/x-csv")
+    wrapper.seek(0)
+    cf.put(file, buffer.getvalue(), content_type="text/csv")
 
 
 def write_json(data, path):

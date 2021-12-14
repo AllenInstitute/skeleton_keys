@@ -96,7 +96,7 @@ def extract_morphology_features(
     input_data = {
         "specimen_id": specimen_id,
         "aligned_depth_profile_file": aligned_depth_profile_file,
-        "aligned_soma_file": aligned_depth_profile_file,
+        "aligned_soma_file": aligned_soma_file,
         "swc_dir": swc_dir,
         "swc_paths_file": swc_paths_file,
         "layer_list": layer_list,

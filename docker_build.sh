@@ -1,1 +1,1 @@
-docker build -t fcollman/skelkeys . --build-arg GITHUB_TOKEN=$GITHUB_TOKEN
+docker build -t fcollman/skelkeys:$1 . --build-arg GITHUB_TOKEN=$GITHUB_TOKEN

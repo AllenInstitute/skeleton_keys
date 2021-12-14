@@ -8,13 +8,16 @@ from skeleton_keys import cloudfields
 from skeleton_keys.io import read_json_file, get_path_files, read_csv
 
 class PostprocessFeaturesParameters(ags.ArgSchema):
-    input_file_directory = cloudfields.InputFile(
+    input_file_directory = cloudfields.InputDir(
         default=None,
         required=False,
+        allow_none=True,
         description="Directory containing long-form CSV files of morphology features",
     )
     input_files = ags.fields.List(
         cloudfields.InputFile(),
+        default=[],
+        required=False,
         cli_as_single_argument=True,
         description="Long-form CSV files of morphology features",
     )
@@ -47,10 +50,17 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 
 def main(args):
     df_list = []
-    if args.get("input_file_directory") is not None:
-        input_files = get_path_files(args.get("input_file_directory"), regex_template=".csv$")
+    if args["input_file_directory"] is not None:
+        input_files = get_path_files(args["input_file_directory"], regex_template=".csv$")
+        print(f'Found {len(input_files)} files in the input directory')
     else:
-        input_files = args["input_files"]
+        input_files = []
+    
+    for fn in args["input_files"]:
+        input_files.append(fn)
+    
+    if len(input_files) == 0:
+        raise ValueError("No input files found!")
     
     for filename in input_files:
         df = read_csv(filename, index_col=0)

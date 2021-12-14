@@ -1,12 +1,18 @@
 import logging
 import re
+import glob
 import numpy as np
 import pandas as pd
 import argschema as ags
 from skeleton_keys import cloudfields
-from skeleton_keys.io import read_json_file, 
+from skeleton_keys.io import read_json_file, get_path_files, read_csv
 
 class PostprocessFeaturesParameters(ags.ArgSchema):
+    input_file_directory = cloudfields.InputFile(
+        default=None,
+        required=False,
+        description="Directory containing long-form CSV files of morphology features",
+    )
     input_files = ags.fields.List(
         cloudfields.InputFile(),
         cli_as_single_argument=True,
@@ -41,8 +47,13 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 
 def main(args):
     df_list = []
-    for filename in args["input_files"]:
-        df = pd.read_csv(read_bytes(filename), index_col=0)
+    if args.get("input_file_directory") is not None:
+        input_files = get_path_files(args.get("input_file_directory"), regex_template=".csv$")
+    else:
+        input_files = args["input_files"]
+    
+    for filename in input_files:
+        df = read_csv(filename, index_col=0)
         df_list.append(df)
 
     morph_df = pd.concat(df_list)

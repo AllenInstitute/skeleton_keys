@@ -2,6 +2,7 @@ import cloudfiles
 import os
 import marshmallow as mm
 import sys
+import secrets
 
 
 class OutputFile(mm.fields.Str):
@@ -41,10 +42,9 @@ class OutputFile(mm.fields.Str):
         cloudpath, file = os.path.split(value)
         cf = cloudfiles.CloudFiles(cloudpath)
         try:
-            cf.put(".cftest", b"1")
-            cf.delete(
-                ".cftest",
-            )
+            hex = secrets.token_hex(16)
+            cf.put(f".cftest_{hex}", b"1")
+            cf.delete(f".cftest_{hex}")
         except Exception as e:  # pragma: no cover
             raise mm.ValidationError(
                 "%s cannot be written to cloud " % value
@@ -78,8 +78,9 @@ class OutputDir(mm.fields.Str):
 
         if not cf.isdir():
             try:
-                cf.put(".cftest", b"0")
-                cf.delete(".cftest")
+                hex = secrets.token_hex(16)
+                cf.put(f".cftest_{hex}", b"1")
+                cf.delete(f".cftest_{hex}")
             except:
                 raise mm.ValidationError(
                     "{} is not a directory and you cannot write to it it".format(value)

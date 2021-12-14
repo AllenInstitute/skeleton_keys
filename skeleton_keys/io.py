@@ -3,12 +3,14 @@ import cloudfiles
 import os
 import io
 
+
 def read_json_file(cloudpath):
     if "://" not in cloudpath:
         cloudpath = "file://" + cloudpath
-    folder,file = os.path.split(cloudpath)
+    folder, file = os.path.split(cloudpath)
     cf = cloudfiles.CloudFiles(folder)
     return cf.get_json(file)
+
 
 def read_bytes(path):
     if "://" not in path:
@@ -17,7 +19,8 @@ def read_bytes(path):
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     byt = io.BytesIO(cf.get(file))
-    return byt 
+    return byt
+
 
 def read_csv(path, **kwargs):
 
@@ -25,27 +28,30 @@ def read_csv(path, **kwargs):
     df = pd.read_csv(byt, **kwargs)
     return df
 
+
 def write_dataframe_to_csv(df, path, **kwargs):
     if "://" not in path:
         path = "file://" + path
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     buffer = io.BytesIO()
-    charset = 'utf-8'
+    charset = "utf-8"
     wrapper = io.TextIOWrapper(buffer, encoding=charset)
     df.to_csv(wrapper, **kwargs)
     buffer.seek(0)
-    cf.put(file, buffer.getvalue(), content_type='application/x-csv')
+    cf.put(file, buffer.getvalue(), content_type="application/x-csv")
 
-def write_json(data,path):
+
+def write_json(data, path):
     if "://" not in path:
         path = "file://" + path
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     cf.put_json(file, data)
-    
+
+
 def load_swc_as_dataframe(swc_file):
-    """ Load a morphology SWC file into a pandas DataFrame.
+    """Load a morphology SWC file into a pandas DataFrame.
 
     The dataframe contains the columns:
         - ID : node identifier
@@ -70,7 +76,7 @@ def load_swc_as_dataframe(swc_file):
     df : DataFrame
         Dataframe with morphology information
     """
-    return pd.read_table(
+    return read_csv(
         swc_file,
         sep=" ",
         comment="#",

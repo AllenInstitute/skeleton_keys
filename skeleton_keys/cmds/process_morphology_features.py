@@ -231,7 +231,7 @@ def specimen_morph_features(
                     result["feature"] = "bias"
                     result_x = result.copy()
                     result_x["dimension"] = "x"
-                    result_x["value"] = value[0]
+                    result_x["value"] = abs(value[0])
 
                     result_y = result.copy()
                     result_y["dimension"] = "y"

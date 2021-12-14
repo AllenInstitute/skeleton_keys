@@ -7,6 +7,9 @@ import re
 
 def fix_local_cloudpath(cloudpath):
     if "://" not in cloudpath:
+        dir, _ = os.path.split(cloudpath)
+        if len(dir) == 0:
+            cloudpath = './' + cloudpath
         cloudpath = "file://" + cloudpath
     return cloudpath
 

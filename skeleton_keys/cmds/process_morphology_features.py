@@ -41,10 +41,10 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         description="optional - folder to find swc files, assuming specimen_id.swc is filename",
     )
 
-    aligned_depth_profile_file = ags.fields.InputFile(
+    aligned_depth_profile_file = cloudfields.InputFile(
         description="CSV file with layer-aligned depth profile information",
     )
-    aligned_soma_file = ags.fields.InputFile(
+    aligned_soma_file = cloudfields.InputFile(
         description="CSV file with layer-aligned soma depth information",
     )
     layer_list = ags.fields.List(
@@ -134,7 +134,7 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
     if preexisting_file is None:
         transformed, loadings = calculate_pca_transforms_and_loadings(df.values)
     else:
-        loadings = read_csv(read_bytes(preexisting_file), header=None).values
+        loadings = pd.read_csv(read_bytes(preexisting_file), header=None).values
         transformed = apply_loadings_to_profiles(df.values, loadings)
 
     if output_file is not None:
@@ -320,7 +320,7 @@ def main(args):
         if analyze_axon_flag:
             if args['axon_depth_profile_loadings_file'] is None:
                 raise MorphFeatureInputError("you must specify axon loadings file when processing 1 cell")
-        if analyze_basal_flag:
+        if analyze_basal_flag and analyze_basal_dendrite_depth_flag:
             if args['basal_dendrite_depth_profile_loadings_file'] is None:
                 raise MorphFeatureInputError("you must specify basal dendrites loadings file when processing 1 cell")
         if analyze_apical_flag:
@@ -431,17 +431,16 @@ def main(args):
     profile_comparison_pairs = []
     if analyze_axon_flag and analyze_apical_flag:
         profile_comparison_pairs.append(
-            ("axon", "apical_dendrite", axon_depth_df, apical_depth_df)
+            ("axon", "apical_dendrite", axon_depth_df.loc[available_ids,:], apical_depth_df.loc[available_ids,:])
         )
     if analyze_axon_flag and analyze_basal_flag:
         profile_comparison_pairs.append(
-            ("axon", "basal_dendrite", axon_depth_df, basal_depth_df)
+            ("axon", "basal_dendrite", axon_depth_df.loc[available_ids,:], basal_depth_df.loc[available_ids,:])
         )
     if analyze_apical_flag and analyze_basal_flag:
         profile_comparison_pairs.append(
-            ("apical_dendrite", "basal_dendrite", apical_depth_df, basal_depth_df)
+            ("apical_dendrite", "basal_dendrite", apical_depth_df.loc[available_ids,:], basal_depth_df.loc[available_ids,:])
         )
-
     # Analyze earthmover distances and overlap between depth profiles
     profile_comparison_result = []
     for name_a, name_b, df_a, df_b in profile_comparison_pairs:
@@ -495,9 +494,11 @@ def main(args):
         )
         for specimen_id in specimen_ids
     ]
-    pool = Pool()
-    morph_results = pool.starmap(specimen_morph_features, map_input)
-
+    if len(specimen_ids)>1:
+        pool = Pool()
+        morph_results = pool.starmap(specimen_morph_features, map_input)
+    else:
+        morph_results = [specimen_morph_features(*map_input[0])]
     # Save features to CSV
     long_result = []
     long_result += soma_loc_res
@@ -505,9 +506,10 @@ def main(args):
     long_result += profile_comparison_result
     for res in morph_results:
         long_result += res
-
     output_file = args["output_file"]
-    write_dataframe_to_csv(pd.DataFrame(long_result), output_file)
+    dfout = pd.DataFrame(long_result)
+    print(dfout)
+    write_dataframe_to_csv(dfout, output_file)
 
 
 def console_script():

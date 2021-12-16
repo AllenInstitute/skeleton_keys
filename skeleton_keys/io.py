@@ -2,20 +2,35 @@ import pandas as pd
 import cloudfiles
 import os
 import io
+import re
 
+
+def fix_local_cloudpath(cloudpath):
+    if "://" not in cloudpath:
+        dir, _ = os.path.split(cloudpath)
+        if len(dir) == 0:
+            cloudpath = './' + cloudpath
+        cloudpath = "file://" + cloudpath
+    return cloudpath
+
+def get_path_files(cloudpath, regex_template=None):
+    cloudpath = fix_local_cloudpath(cloudpath)
+    cf = cloudfiles.CloudFiles(cloudpath)
+    if regex_template is None:
+        filenames = [f"{cloudpath}/{fn}" for fn in cf.list()]
+    else:
+        filenames = [f"{cloudpath}/{fn}" for fn in cf.list() if re.search(regex_template, fn) is not None]
+    return filenames
 
 def read_json_file(cloudpath):
-    if "://" not in cloudpath:
-        cloudpath = "file://" + cloudpath
+    path = fix_local_cloudpath(cloudpath)
     folder, file = os.path.split(cloudpath)
     cf = cloudfiles.CloudFiles(folder)
     return cf.get_json(file)
 
 
 def read_bytes(path):
-    if "://" not in path:
-        path = "file://" + path
-
+    path = fix_local_cloudpath(path)
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     byt = io.BytesIO(cf.get(file))
@@ -23,15 +38,13 @@ def read_bytes(path):
 
 
 def read_csv(path, **kwargs):
-
     byt = read_bytes(path)
     df = pd.read_csv(byt, **kwargs)
     return df
 
 
 def write_dataframe_to_csv(df, path, **kwargs):
-    if "://" not in path:
-        path = "file://" + path
+    path = fix_local_cloudpath(path)
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     buffer = io.BytesIO()
@@ -43,8 +56,7 @@ def write_dataframe_to_csv(df, path, **kwargs):
 
 
 def write_json(data, path):
-    if "://" not in path:
-        path = "file://" + path
+    path = fix_local_cloudpath(path)
     cloudpath, file = os.path.split(path)
     cf = cloudfiles.CloudFiles(cloudpath)
     cf.put_json(file, data)

@@ -31,6 +31,10 @@ class PostprocessFeaturesParameters(ags.ArgSchema):
         default=False,
         description="Whether to drop number of apical dendrite stems features",
     )
+    drop_nans = ags.fields.Boolean(
+        default=True,
+        description="Whether to drop cells that have nan for any values",
+    )
 
 
 def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -49,6 +53,7 @@ def main(args):
     drop_stem_exit = args["drop_stem_exit"]
     drop_bifurcation_angle = args["drop_bifurcation_angle"]
     drop_apical_n_stems = args["drop_apical_n_stems"]
+    drop_nans = args['drop_nans']
 
     if drop_stem_exit:
         mask = ((morph_df["feature"].str.startswith("stem_exit")))
@@ -70,15 +75,16 @@ def main(args):
                                    "compartment_type",
                                    "dimension"]).sort_index().unstack(["feature", "compartment_type", "dimension"])
 
-    # Find and drop cells that have nans for values
-    null_rows = morph_pt.isnull().any(axis=1)
-    print(null_rows)
-    if np.sum(null_rows) > 0:
-        logging.warning("Found cells with nan values; dropping cells")
-        null_cols = morph_pt.isnull().any(axis=0)
-        print(morph_pt.columns[null_cols])
-        logging.warning(morph_pt.index[null_rows].tolist())
-        morph_pt = morph_pt.loc[~null_rows, :]
+    if drop_nans:
+        # Find and drop cells that have nans for values
+        null_rows = morph_pt.isnull().any(axis=1)
+        print(null_rows)
+        if np.sum(null_rows) > 0:
+            logging.warning("Found cells with nan values; dropping cells")
+            null_cols = morph_pt.isnull().any(axis=0)
+            print(morph_pt.columns[null_cols])
+            logging.warning(morph_pt.index[null_rows].tolist())
+            morph_pt = morph_pt.loc[~null_rows, :]
 
 
     idx = pd.IndexSlice

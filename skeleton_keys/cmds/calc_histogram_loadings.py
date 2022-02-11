@@ -1,12 +1,15 @@
+import json
 import argschema as ags
 import numpy as np
 import pandas as pd
+from skeleton_keys.database_queries import swc_paths_from_database
 
 from skeleton_keys.cmds.process_morphology_features import (
     select_and_convert_depth_columns,
     analyze_depth_profiles,
 )
-from skeleton_keys.io import read_bytes
+import os
+
 
 class CalcHistogramLoadingsParameters(ags.ArgSchema):
     specimen_id_file = ags.fields.InputFile(
@@ -51,11 +54,11 @@ class CalcHistogramLoadingsParameters(ags.ArgSchema):
 def main(args):
     # Load specimen IDs
     specimen_id_file = args["specimen_id_file"]
-    specimen_ids = np.loadtxt(read_bytes(specimen_id_file)).astype(int)
+    specimen_ids = np.loadtxt(specimen_id_file).astype(int)
 
     # Load depth profiles
     aligned_depth_profile_file = args["aligned_depth_profile_file"]
-    depth_profile_df = pd.read_csv(read_bytes(aligned_depth_profile_file), index_col=0)
+    depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
 
     # Compartment analysis flags
     analyze_axon_flag = args["analyze_axon"]

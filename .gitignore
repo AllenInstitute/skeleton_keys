@@ -75,4 +75,3 @@ target/
 # Development
 sandbox/
 .env
-.DS_Store

@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/
 RUN conda config --set channel_priority strict 
 RUN conda install -y -c conda-forge rtree==0.9.7 fenics==2019.1.0 python==3.8 mshr==2019.1.0 hdf5==1.10.6 h5py==2.10.0
 RUN pip install git+https://github.com/fcollman/AllenSDK.git
-RUN pip install git+https://github.com/AllenInstitute/neuron_morphology@install_improvements
+RUN pip install git+https://github.com/AllenInstitute/neuron_morphology@cloudfiles
 ARG GITHUB_TOKEN
 WORKDIR /usr/local/src
 RUN git clone https://${GITHUB_TOKEN}@github.com/AllenInstitute/ccf_streamlines.git &&\

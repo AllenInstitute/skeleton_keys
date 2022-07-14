@@ -1,6 +1,7 @@
 import os
 import logging
 import numpy as np
+import pandas as pd
 import allensdk.internal.core.lims_utilities as lu
 from functools import partial
 from neuron_morphology.marker import read_marker_file
@@ -180,7 +181,7 @@ def query_marker_file(specimen_id, query_engine=None):
     if len(results) > 0:
         return os.path.join(results[0]["storage_directory"], results[0]["filename"])
     else:
-        raise ValueError(f"No marker file found for specimen ID {specimen_id}")
+        return None
 
 
 def query_cell_depth(specimen_id, query_engine=None):
@@ -342,7 +343,10 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
         cell_depth = 40.0
     marker_file = query_marker_file(specimen_id, engine)
 
-    markers = read_marker_file(marker_file)
+    if marker_file:
+        markers = read_marker_file(marker_file)
+    else:
+        markers = []
     soma_marker = _identify_soma_marker(morph, markers)
     soma = morph.get_soma()
     if (soma_marker is not None) and (cell_depth is not None):
@@ -446,7 +450,11 @@ def determine_flip_switch(morph, specimen_id, revised_marker_file=None, marker_t
         if specimen_id in revised_marker_paths["specimen_id"].tolist():
             logging.debug("using revised markers for {:d}".format(specimen_id))
             marker_path = revised_marker_paths.set_index("specimen_id").at[specimen_id, "revised_marker_path"]
-    markers = read_marker_file(marker_path)
+
+    if marker_path:
+        markers = read_marker_file(marker_path)
+    else:
+        markers = []
 
     info_list = []
 

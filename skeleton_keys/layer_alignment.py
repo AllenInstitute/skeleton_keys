@@ -8,11 +8,11 @@ from typing import Dict, List, Tuple, Optional
 from neuron_morphology.layered_point_depths.__main__ import tuplize
 
 
-def layer_aligned_y_values(morph, avg_layer_depths,
+def layer_aligned_y_values(morph, avg_layer_depths, layer_list,
         depth_field, gradient_field, snapped_polys_surfs):
     nodes_ids, nodes_x, nodes_y = zip(*[(n["id"], n["x"], n["y"]) for n in morph.nodes()])
 
-    avg_side_depths = layer_side_depths(avg_layer_depths)
+    avg_side_depths = layer_side_depths(avg_layer_depths, layer_list)
 
     nodes_ids = np.array(nodes_ids)
     nodes_x = np.array(nodes_x)

@@ -20,9 +20,8 @@ from neuron_morphology.features.path import (
     max_path_distance, mean_contraction
 )
 from neuron_morphology.features.soma import (
-    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance
+    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance, calculate_soma_surface
 )
-
 
 def default_features():
     """ Get set of default morphology features for feature extractor"""
@@ -40,5 +39,6 @@ def default_features():
         specialize(mean_contraction, NEURITE_SPECIALIZATIONS),
         specialize(soma_percentile, NEURITE_SPECIALIZATIONS),
         specialize(calculate_number_of_stems, [BasalDendriteSpec]),
-        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec])
+        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec]),
+        calculate_soma_surface
     ]

@@ -164,7 +164,7 @@ def specimen_morph_features(
     fe_results = fe.extract(cell_data)
 
     # Determine compartments from which to keep features
-    compartments = []
+    compartments = ["soma"]
     if analyze_axon:
         compartments.append("axon")
     if analyze_basal_dendrite:
@@ -194,10 +194,16 @@ def specimen_morph_features(
     for fullname, value in long_results.items():
         split_name = fullname.split(".")
         compartment_name = split_name[0]
-        if compartment_name not in compartments:
-            continue
 
-        primary_feature = split_name[1]
+        # neuron_morphology assigns the calculate_soma_surface.name attribute to 'calculate_soma_surface' so
+        # split_name and compartment_name are = 'calculate_soma_surface'
+        if not any([c in compartment_name for c in compartments]):
+            continue
+        if len(split_name) > 1:
+            primary_feature = split_name[1]
+        else:
+            primary_feature = split_name[0]
+
         result = {
             "specimen_id": specimen_id,
             "feature": primary_feature,
@@ -206,6 +212,12 @@ def specimen_morph_features(
         if primary_feature in unchanged_features:
             result["dimension"] = "none"
             result["value"] = value
+            result_list.append(result)
+        elif primary_feature == "calculate_soma_surface":
+            result["dimension"] = "none"
+            result["value"] = value
+            result["feature"] = "surface_area"
+            result["compartment_type"] = "soma"
             result_list.append(result)
         elif primary_feature == "soma_percentile":
             # soma percentile returned as a 2-tuple; split them into

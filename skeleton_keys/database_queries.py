@@ -358,7 +358,7 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
         markers = []
     soma_marker = _identify_soma_marker(morph, markers)
     soma = morph.get_soma()
-    if (soma_marker is not None) and (cell_depth != 0):
+    if (soma_marker is not None) and (cell_depth != 0) and (cell_depth is not None):
         z_level = soma_marker["z"]
         fixed_depth = np.abs(soma["z"] - z_level)
 

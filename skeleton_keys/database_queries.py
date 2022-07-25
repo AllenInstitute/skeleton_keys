@@ -107,7 +107,8 @@ def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, q
         elif specimen_id is not None and item["biospecimen_id"] == specimen_id:
             results[item["name"]] = data
         elif len(results[item["name"]]["path"]) < len(data["path"]):
-            if specimen_id is not None and results[item["name"]]["biospecimen_id"] == specimen_id and item["biospecimen_id"] != specimen_id:
+            if specimen_id is not None and results[item["name"]]["biospecimen_id"] == specimen_id and item[
+                "biospecimen_id"] != specimen_id:
                 # don't replace if already have a match by ID (and this isn't also a match)
                 pass
             else:
@@ -286,7 +287,7 @@ def swc_paths_from_database(specimen_ids):
     engine = default_query_engine()
 
     paths = {int(sp_id): query_for_swc_file(int(sp_id), engine)
-        for sp_id in specimen_ids}
+             for sp_id in specimen_ids}
     return paths
 
 
@@ -318,6 +319,7 @@ def pia_wm_soma_from_database(specimen_id, imser_id):
 
     return pia_surface, wm_surface, soma_center
 
+
 def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
     """Determine shrinkage factor for morphology using database information
 
@@ -339,8 +341,15 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
     """
     engine = default_query_engine()
     cell_depth = query_cell_depth(specimen_id, engine)
-    if cell_depth == 0 and specimen_id == 992386952: # special case for missing LIMS entry
-        cell_depth = 40.0
+
+    # special cases for missing LIMS entry
+    special_cases = {992386952: 40.0,
+                     738006528: 50.0,
+                     848629140: 37.0,
+                     848672037: 61.0,
+                     701072075: 0}
+    if cell_depth == 0 and specimen_id in special_cases.keys():
+        cell_depth = special_cases[specimen_id]
     marker_file = query_marker_file(specimen_id, engine)
 
     if marker_file:
@@ -349,7 +358,7 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
         markers = []
     soma_marker = _identify_soma_marker(morph, markers)
     soma = morph.get_soma()
-    if (soma_marker is not None) and (cell_depth is not None):
+    if (soma_marker is not None) and (cell_depth != 0):
         z_level = soma_marker["z"]
         fixed_depth = np.abs(soma["z"] - z_level)
 
@@ -375,7 +384,7 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
 
 
 def _identify_soma_marker(morph, markers, marker_tol=10.0):
-    soma_markers = [m for m in markers if m["name"] == 30] # 30 is the code for soma marker
+    soma_markers = [m for m in markers if m["name"] == 30]  # 30 is the code for soma marker
     soma = morph.get_soma()
     if len(soma_markers) == 0:
         soma_marker = None
@@ -458,9 +467,8 @@ def determine_flip_switch(morph, specimen_id, revised_marker_file=None, marker_t
 
     info_list = []
 
-
     soma_marker = _identify_soma_marker(morph, markers, marker_tol=marker_tol)
-    flip_toggle = 1. # Assume "flipped" ie rostral surface on top by default
+    flip_toggle = 1.  # Assume "flipped" ie rostral surface on top by default
     if soma_marker is not None:
         if (soma_marker["z"] - morph.get_soma()["z"]) > 0:
             print("cut surface is to the right!")
@@ -469,7 +477,7 @@ def determine_flip_switch(morph, specimen_id, revised_marker_file=None, marker_t
         else:
             info_list.append("cut surface appears to be to the 'left' as is typical")
     else:
-            info_list.append("no soma marker to determine side of cut surface")
+        info_list.append("no soma marker to determine side of cut surface")
 
     flip_sql = f"""
         select distinct sp.id, sp.name, flip.name

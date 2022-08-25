@@ -31,7 +31,7 @@ def main():
 
     # Load the specimen IDs
     specimen_id_file = module.args['specimen_id_file']
-    specimen_ids = np.loadtxt(specimen_id_file, dtype=int)
+    specimen_ids = np.loadtxt(specimen_id_file, dtype=int, ndmin=1)
 
     # Load the layer info
     layer_depths_file = module.args['layer_depths_file']
@@ -80,7 +80,7 @@ def main():
             'specimen_id': spec_id,
             'soma_distance_from_pia': -soma_y,
         })
-
+    
     # Save results
     output_hist_file = module.args['output_hist_file']
     output_soma_file = module.args['output_soma_file']

@@ -318,7 +318,7 @@ def specimen_morph_features(
 def main(args):
     # Load specimen IDs
     specimen_id_file = args["specimen_id_file"]
-    specimen_ids = np.loadtxt(specimen_id_file).astype(int)
+    specimen_ids = np.loadtxt(specimen_id_file, ndmin=1).astype(int)
 
     # Get paths to SWC files
     swc_paths_file = args["swc_paths_file"]

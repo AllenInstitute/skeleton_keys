@@ -1,4 +1,20 @@
 import pandas as pd
+import pkg_resources
+import json
+
+def load_default_layer_template():
+    """
+    Load the default average cortical layer depth json. Keys are strings representing cortical layers (e.g.'2/3','4'...)
+    Values represent the cortical depth for the top (pia side) of a given layer
+
+    :return:
+    depths: Dictionary
+
+    """
+    depth_file = pkg_resources.resource_filename(__name__, 'test_files/avg_layer_depths.json')
+    with open(depth_file, "r") as fn:
+        depths = json.load(fn)
+    return depths
 
 
 def load_swc_as_dataframe(swc_file):

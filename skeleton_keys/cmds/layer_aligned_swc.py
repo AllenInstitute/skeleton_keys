@@ -30,14 +30,14 @@ from skeleton_keys.drawings import (
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.layer_alignment import layer_aligned_y_values
-
+from skeleton_keys.io import load_default_layer_template
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")
     swc_path = ags.fields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )
-    layer_depths_file = ags.fields.InputFile(default="avg_layer_depths.json")
+    layer_depths_file = ags.fields.InputFile(default=None, allow_none=True)
     output_file = ags.fields.OutputFile(default="output.swc")
     correct_for_shrinkage = ags.fields.Boolean(
         default=True,
@@ -79,8 +79,13 @@ def main(args):
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
     # Load the reference layer depths
-    with open(args["layer_depths_file"], "r") as f:
-        avg_layer_depths = json.load(f)
+    layer_depths_file = args['layer_depths_file']
+    if layer_depths_file:
+        with open(layer_depths_file, "r") as f:
+            avg_layer_depths = json.load(f)
+    else:
+        avg_layer_depths = load_default_layer_template()
+
 
     layer_list = args["layer_list"]
 

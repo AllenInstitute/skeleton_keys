@@ -5,7 +5,30 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from shapely.geometry import LineString
 from typing import Dict, List, Tuple, Optional
-from neuron_morphology.layered_point_depths.__main__ import tuplize
+from neuron_morphology.layered_point_depths.__main__ import tuplize, setup_interpolator
+
+
+def cortex_thickness_aligned_y_values(morph, avg_layer_depths,
+        depth_field):
+    nodes_ids, nodes_x, nodes_y = zip(*[(n["id"], n["x"], n["y"]) for n in morph.nodes()])
+
+    nodes_ids = np.array(nodes_ids)
+    nodes_x = np.array(nodes_x)
+    nodes_y = np.array(nodes_y)
+
+    # Interpolators for navigating fields - gives nan values for points outside field
+    depth_interp = setup_interpolator(
+        depth_field, None, method="linear",
+        bounds_error=False, fill_value=None)
+
+    pos = np.column_stack((nodes_x, nodes_y))
+    rel_depths = depth_interp(pos)
+
+    total_thickness = avg_layer_depths['wm']
+    depths = -total_thickness * (1 - rel_depths)
+    nan_mask = np.isnan(depths)
+    print("NaN y-values: ", np.sum(nan_mask))
+    return dict(zip(nodes_ids[~nan_mask], depths[~nan_mask]))
 
 
 def layer_aligned_y_values(morph, avg_layer_depths, layer_list,
@@ -153,7 +176,7 @@ def step_all_nodes(pos, depth_interp, dx_interp, dy_interp, surf, step_size, max
             if intersection.geom_type == "MultiPoint":
                 cur_pt = shapely.geometry.Point(cur_pos[ind, :])
                 dist = np.inf
-                for test_pt in intersection:
+                for test_pt in intersection.geoms:
                     test_dist = cur_pt.distance(test_pt)
                     if test_dist < dist:
                         dist = test_dist

@@ -1,4 +1,5 @@
 import json
+import logging
 import numpy as np
 import pandas as pd
 import argschema as ags
@@ -29,8 +30,9 @@ from skeleton_keys.drawings import (
     convert_and_translate_snapped_to_microns,
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
-from skeleton_keys.layer_alignment import layer_aligned_y_values
 from skeleton_keys.io import load_default_layer_template
+from skeleton_keys.layer_alignment import layer_aligned_y_values, cortex_thickness_aligned_y_values
+
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")
@@ -110,6 +112,13 @@ def main(args):
         # Query for layers
         layer_polygons = layer_polygons_from_database(imser_id)
 
+    # Check that layer polygons exist
+    if len(layer_polygons) < 1:
+        logging.warning(f"No layer drawings found for {specimen_id}; will instead align to cortex depth")
+        no_layers = True
+    else:
+        no_layers = False
+
     # Load the morphology
     morph = morphology_from_swc(swc_path)
 
@@ -121,6 +130,7 @@ def main(args):
     soma_path = ",".join(["{},{}".format(x, y) for x, y in soma_drawing["path"]])
     resolution = pia_surface["resolution"]
 
+    logging.info(f"Calculating depth field for {specimen_id}")
     depth_field, gradient_field, translation = run_streamlines(
         pia_path,
         wm_path,
@@ -162,21 +172,27 @@ def main(args):
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)
 
-    # snap together hand-drawn layer borders and determine pia/wm sides
-    snapped_polys_surfs = snap_hand_drawn_polygons(
-        layer_polygons, pia_surface, wm_surface, layer_list
-    )
-
-    # convert to micron scale and translate to soma-centered depth field
-    snapped_polys_surfs = convert_and_translate_snapped_to_microns(
-        snapped_polys_surfs, resolution, translation
-    )
-
     # get aligned y-values for morph
-    print("Calculating layer-aligned depths for all points")
-    y_value_info = layer_aligned_y_values(
-        morph, avg_layer_depths, layer_list, depth_field, gradient_field, snapped_polys_surfs
-    )
+    if no_layers:
+        logging.info("Calculating cortex-thickness adjusted depths for all points")
+        y_value_info = cortex_thickness_aligned_y_values(
+            morph, avg_layer_depths, depth_field
+        )
+    else:
+        # snap together hand-drawn layer borders and determine pia/wm sides
+        snapped_polys_surfs = snap_hand_drawn_polygons(
+            layer_polygons, pia_surface, wm_surface, layer_list
+        )
+
+        # convert to micron scale and translate to soma-centered depth field
+        snapped_polys_surfs = convert_and_translate_snapped_to_microns(
+            snapped_polys_surfs, resolution, translation
+        )
+
+        logging.info("Calculating layer-aligned depths for all points")
+        y_value_info = layer_aligned_y_values(
+            morph, avg_layer_depths, depth_field, gradient_field, snapped_polys_surfs
+        )
 
     # upright the morphology
     rotation_upright_matrix = rotation_from_angle(upright_angle, axis=2)

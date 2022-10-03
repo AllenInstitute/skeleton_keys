@@ -180,6 +180,7 @@ def specimen_morph_features(
         "max_euclidean_distance",
         "max_path_distance",
         "mean_contraction",
+        "num_outer_bifurcations",
     ]
     dendrite_only_features = [
         "total_surface_area",
@@ -259,6 +260,17 @@ def specimen_morph_features(
                     result["dimension"] = "y"
                     result["value"] = value
                     result_list.append(result)
+
+    if "early_branch_path" in long_results:
+        result_list.append(
+            {
+                "specimen_id": specimen_id,
+                "feature": "early_branch_path",
+                "compartment_type": "none",
+                "dimension": "none",
+                "value": long_results["early_branch_path"],
+            }
+        )
 
     if "basal_dendrite.calculate_stem_exit_and_distance" in long_results:
         stem_info = long_results["basal_dendrite.calculate_stem_exit_and_distance"]

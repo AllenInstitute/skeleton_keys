@@ -26,3 +26,12 @@ Reference information
     :toctree: generated/
 
     io.load_default_layer_template
+
+
+Saving internal database information to files
+---------------------------------------------
+
+.. autosummary::
+    :toctree: generated/
+
+    io.save_lims_surface_and_layers_to_json

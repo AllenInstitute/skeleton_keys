@@ -157,7 +157,7 @@ def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine
         return {
             "name": item["name"],
             "path": path,
-            "center": np.asarray(path).mean(axis=0),
+            "center": np.asarray(path).mean(axis=0).tolist(),
             "resolution": resolution,
         }
     else:

@@ -191,7 +191,7 @@ def main(args):
 
         logging.info("Calculating layer-aligned depths for all points")
         y_value_info = layer_aligned_y_values(
-            morph, avg_layer_depths, depth_field, gradient_field, snapped_polys_surfs
+            morph, avg_layer_depths, layer_list, depth_field, gradient_field, snapped_polys_surfs
         )
 
     # upright the morphology

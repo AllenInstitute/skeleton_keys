@@ -2,14 +2,17 @@ import pandas as pd
 import pkg_resources
 import json
 
+
 def load_default_layer_template():
-    """
-    Load the default average cortical layer depth json. Keys are strings representing cortical layers (e.g.'2/3','4'...)
+    """ Load the default average cortical layer depth JSON file.
+
+    Keys are strings representing cortical layers (e.g.'2/3','4'...)
     Values represent the cortical depth for the top (pia side) of a given layer
 
-    :return:
-    depths: Dictionary
-
+    Returns
+    -------
+    depths : dict
+        Dictionary of distances to the pia (in microns) from the upper side of each layer
     """
     depth_file = pkg_resources.resource_filename(__name__, 'test_files/avg_layer_depths.json')
     with open(depth_file, "r") as fn:

@@ -22,6 +22,7 @@ def default_query_engine():
 
 
 def query_for_swc_file(specimen_id, query_engine=None):
+    """Get an SWC file path for a specimen ID using the specified query engine"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -45,6 +46,7 @@ def query_for_swc_file(specimen_id, query_engine=None):
 
 
 def query_for_image_series_id(specimen_id, query_engine=None):
+    """Get an image series ID for a specimen ID using the specified query engine"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -66,7 +68,7 @@ def query_for_image_series_id(specimen_id, query_engine=None):
 
 
 def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, query_engine=None):
-    """ Return the pia and white matter surface drawings for this image series
+    """ Return the pia and white matter surface drawings for an image series (and optionally specimen ID)
     """
     if query_engine is None:
         query_engine = default_query_engine()
@@ -118,7 +120,7 @@ def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, q
 
 
 def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine=None):
-    """ Return the soma center coordinates for this specimen
+    """ Return the soma center coordinates for an image series ID and specimen ID
     """
     if query_engine is None:
         query_engine = default_query_engine()
@@ -163,7 +165,7 @@ def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine
 
 
 def query_marker_file(specimen_id, query_engine=None):
-    """ Return marker file path for specimen """
+    """ Return the marker file path for a specimen ID"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -243,6 +245,7 @@ def query_for_layer_polygons(focal_plane_image_series_id, query_engine=None):
 
 
 def query_pinning_info(project_codes=["T301", "T301x", "mIVSCC-MET"], query_engine=None):
+    """Get the pinned CCF coordinates for a set of projects"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -325,19 +328,20 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
 
     Parameters
     ----------
+    morph : Morphology
+        Neuronal morphology
+    cut_thickness : float, default 350.
     specimen_id : int
         Specimen ID
+    cut_thickness : float, default 350.
+        The cutting thickness (in microns) of the original slice. Used
+        as an upper limit to the calculated thickness or as a fallback value
+        if the thickness cannot be determined from the morphology and markers.
 
     Returns
     -------
-    pia_path : str
-        Pia drawing path
-    wm_path : str
-        White matter drawing path
-    soma_path : str
-        Soma drawing path
-    resolution : float
-        Resolution of drawings
+    corrected_scale : float
+        The factor to multiply the z-dimension by to adjust for shrinkage
     """
     engine = default_query_engine()
     cell_depth = query_cell_depth(specimen_id, engine)

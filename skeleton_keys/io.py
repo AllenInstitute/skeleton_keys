@@ -1,5 +1,5 @@
 import pandas as pd
-import pkg_resources
+from importlib.resources import files
 import json
 from skeleton_keys.database_queries import (
     query_for_image_series_id,
@@ -18,7 +18,8 @@ def load_default_layer_template():
     depths : dict
         Dictionary of distances to the pia (in microns) from the upper side of each layer
     """
-    depth_file = pkg_resources.resource_filename(__name__, 'test_files/avg_layer_depths.json')
+    depth_file = files('skeleton_keys') / "test_files/avg_layer_depths.json"
+
     with open(depth_file, "r") as fn:
         depths = json.load(fn)
     return depths

@@ -81,6 +81,12 @@ Script to calculate morphological features for a set of SWC files.
 Script to perform postprocessing on the long-form morphology feature files (convert
 to wide format and perform z-score normalization).
 
+When this script normalizes the values, it normalizes all the values with the same
+feature name to the same scale. This means that, for example, the feature `extent`
+will be normalized in both `x` and `y` dimensions (i.e., width and height) with
+the same scale. The intention is to avoid overemphasizing differences in particular
+dimensions where slight differences may not be relevant.
+
 .. autosummary::
     :toctree: generated/
 

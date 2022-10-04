@@ -14,10 +14,16 @@ release = '0.1'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
+from argschema.autodoc import process_schemas
+
+def setup(app):
+    app.connect('autodoc-process-docstring',process_schemas)
+
+
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
-#     'sphinx.ext.napoleon',
+    'sphinx.ext.napoleon',
     'sphinx.ext.autosectionlabel',
 
 ]
@@ -34,8 +40,3 @@ autodoc_mock_imports = ["fenics", 'mshr']
 html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
 
-
-from argschema.autodoc import process_schemas
-
-def setup(app):
-    app.connect('autodoc-process-docstring',process_schemas)

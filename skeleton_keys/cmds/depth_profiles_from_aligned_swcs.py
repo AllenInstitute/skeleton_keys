@@ -33,8 +33,11 @@ class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
     )
 
 
-def main():
-    module = ags.ArgSchemaParser(schema_type=ProfilesFromAlignedSwcsParameters)
+def main(args = None):
+    if args == None:
+        module = ags.ArgSchemaParser(schema_type=ProfilesFromAlignedSwcsParameters)
+    else:
+        module = args
 
     # Load the specimen IDs
     specimen_id_file = module.args["specimen_id_file"]

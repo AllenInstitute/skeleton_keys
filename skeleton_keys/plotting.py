@@ -3,18 +3,23 @@ import numpy as np
 
 
 def plot_cortical_cell(ax, sk, ld=None, title=None):
-    """plot a cortical neuron according to ivscc style plot
+    """Plot a cortical neuron according to ivscc style plot
 
-    Args:
-        ax (matplotlib.axes]): axes in which to put plot
-        sk (allensdk.core.swc.Morphology): skeleton file read with allensdk
-          assumes the skeleton has negative y values which get more
-          negative as the cell gets lower in cortex, and has
-          compartment labels with soma as 2
-        ld (dict): dictionary of layer depths, where values are positive
-                   indicating how below pia (assumed to be at zero)
-                   layers are, note will be inverted for plotting purposes
-        title ([type]): what title to give the plot
+    Parameters
+    ----------
+    ax : matplotlib.axes
+        Axes object in which to put plot
+    sk : allensdk.core.swc.Morphology
+        Morphology object skeleton read with allensdk.
+        Assumes pia is defined as y = 0 and that the skeleton has negative y
+        values which get more negative as the cell gets lower in cortex, and has
+        compartment labels with soma as 1, axon as 2, basal dendrite as 3, and
+        apical dendrite as 4.
+    ld : dict
+        Dictionary of layer distances, where values are positive
+        indicating distance of the top of the layer fom pia
+    title : str, optional
+        Title for the plot
     """
     MORPH_COLORS = {3: "firebrick", 4: "salmon", 2: "steelblue"}
     for compartment, color in MORPH_COLORS.items():
@@ -46,6 +51,20 @@ def plot_cortical_cell(ax, sk, ld=None, title=None):
 
 
 def plot_layer_polygon(ax, surfaces_and_paths):
+    """Plot the surface and layer drawings
+
+    Parameters
+    ----------
+    ax : matplotlib.axes
+        Axes object in which to put plot
+    surfaces_and_paths : dictionary
+        Dictionary of surface and path dictionaries. The dictionary is expected
+        to have the keys 'pia_path', 'wm_path', 'soma_path', and 'layer_polygons'.
+        The '*_path' values are dictionaries that have 'resolution' and
+        'path' elements, while 'layer_polygons' is a list of dictionaries that
+        also have 'path' elements. Each 'path' is a 2D array of coordinates.
+
+    """
     pia_surface = surfaces_and_paths["pia_path"]
     wm_surface = surfaces_and_paths["wm_path"]
     soma_drawing = surfaces_and_paths["soma_path"]

@@ -9,7 +9,7 @@
 project = 'skeleton_keys'
 copyright = '2022, Nathan Gouwens, Forrest Collman, Matt Mallory, Clare Gamlin'
 author = 'Nathan Gouwens, Forrest Collman, Matt Mallory, Clare Gamlin'
-release = '0.1'
+release = '0.1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

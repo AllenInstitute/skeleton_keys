@@ -26,11 +26,9 @@ class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
         default="aligned_soma_depths_corrected.csv")
 
 
-def main(args = None):
-    if args == None:
+def main(module = None):
+    if module == None:
         module = ags.ArgSchemaParser(schema_type=ProfilesFromAlignedSwcsParameters)
-    else:
-        module = args
 
     # Load the specimen IDs
     specimen_id_file = module.args['specimen_id_file']

@@ -92,23 +92,25 @@ def main(args):
             out_df = pd.DataFrame(group_dict, index=names).T.rename_axis(index_group_label).reset_index()
         else:
             group_dict = {}
-            names = []
-            # Collect all the histograms
-            for col_ind, col_group in coord_df.groupby(col_group_label):
-                names += [f"{col_ind}_{i}" for i in range(len(bins) - 1)]
-                for row_ind, row_group in col_group.groupby(index_group_label):
-                    if row_ind not in group_dict:
-                        group_dict[row_ind] = []
-                    y_values = -row_group[depth_label].values
-                    hist_values, _ = np.histogram(y_values, bins=bins)
-                    group_dict[row_ind].append(hist_values)
+            all_col_names_in_order = []
+            for cn, _ in coord_df.groupby(col_group_label):
+                all_col_names_in_order += [f"{cn}_{i}" for i in range(len(bins) - 1)]
 
-            # Merge horizontally before constructing dataframe
-            for row_ind in group_dict:
-                group_dict[row_ind] = np.hstack(group_dict[row_ind])
+            data_for_df = {}
+            for group_names, group_df in coord_df.groupby([index_group_label, col_group_label]):
+                ind_name = group_names[0]
+                if ind_name not in data_for_df:
+                    data_for_df[ind_name] = {}
+                col_prefix = group_names[1]
 
-            out_df = pd.DataFrame(group_dict, index=names).T.rename_axis(index_group_label).reset_index()
+                y_values = -group_df[depth_label].values
+                hist_values, _ = np.histogram(y_values, bins=bins)
+                names = [f"{col_prefix}_{i}" for i in range(len(hist_values))]
+                data_for_df[ind_name].update(dict(zip(names, hist_values)))
 
+            out_df = pd.DataFrame(data_for_df).fillna(0).astype(int).T
+            out_df = out_df[all_col_names_in_order]
+            out_df = out_df.rename_axis(index_group_label).reset_index()
 
     out_df.to_csv(args['output_hist_file'], index=False)
 

@@ -293,3 +293,75 @@ The wide form feature file output looks like:
 .. csv-table:: Example wide-form feature file
    :file: guide_example_features_wide.csv
    :header-rows: 1
+
+
+Working with general coordinates
+--------------------------------
+
+The ``skeleton_keys`` package was originally built around processing SWC files,
+but it can also be used to align arbitrary sets of coordinates, if provided with
+the appropriate layer drawings.
+
+The command line utility ``skelekeys-layer-aligned-coords`` can take a CSV and
+adjust the specified coordinates to make them layer-aligned. It takes the following
+inputs:
+
+* *coordinate_file* - a CSV with coordinates
+    The coordinate columns must contain "x", "y", and "z" in their names,
+    but can have prefixes and/or suffixes (see below). We'll use an example file
+    named ``coord_example.csv``.
+* *layer_depths_file*  a JSON file with the set of layer depths we're aligning the cell to.
+    Here again we'll use an average set of depths included as a test
+    file, ``avg_layer_depths.json``.
+* *surface_and_layers_file* - a JSON file with the layer drawings.
+    Here, our example uses the file ``coord_layer_drawings.json``.
+* *coordinate_column_prefix (and/or _suffix)* - strings of common prefixes/suffixes
+    This allows the coordinate columns to have names other than the default ``x``,
+    ``y``, and ``z``, but in this example we do not need to use them.
+
+Using this, we can take a starting example file (the columns ``cell_id`` and
+``target_cell_type`` contain extra metadata about the coordinates):
+
+.. csv-table:: Example coordinate file
+   :file: guide_coord_example.csv
+   :header-rows: 1
+
+Use the command:
+
+.. code:: shell
+
+    skelekeys-layer-aligned-coords \
+    --coordinate_file coord_example.csv \
+    --surface_and_layers_file coord_layer_drawings.json \
+    --layer_depths_file avg_layer_depths.json \
+    --output_file aligned_coord_example.csv
+
+And obtain:
+
+.. csv-table:: Example coordinate file
+   :file: guide_aligned_coord_example.csv
+   :header-rows: 1
+
+Note that the ``x`` values have also changed because we have rotated the
+coordinates to an upright orientation (with pia at the top).
+
+This aligned coordinate file can be used to generate histograms with the
+``skelekeys-profiles-from-coords`` command line utility. You need to specify
+which column contains the depth values (here, the column labeled ``y``) with the
+``depth_label`` argument.
+
+You can use other columns in the CSV file to split the histograms across rows using the
+``--index_label`` argument, and/or you can create multiple histograms per row (as in the
+compartment type histograms above) with the ``--hist_split_label`` argument.
+
+For example:
+
+.. code:: shell
+
+    skelekeys-profiles-from-coords \
+    --coordinate_file aligned_coord_example.csv \
+    --layer_depths_file avg_layer_depths.json \
+    --depth_label y \
+    --index_label cell_id \
+    --hist_split_label target_cell_type \
+    --output_hist_file aligned_coord_hist.csv

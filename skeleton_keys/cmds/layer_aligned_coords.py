@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import argschema as ags
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
-    run_streamlines,
+    run_streamlines, convert_path_str_to_list
 )
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 from neuron_morphology.transforms.affine_transform import (
@@ -84,6 +84,10 @@ def main(args):
     pia_surface = surfaces_and_paths["pia_path"]
     wm_surface = surfaces_and_paths["wm_path"]
     layer_polygons = surfaces_and_paths["layer_polygons"]
+    if "soma_path" in surfaces_and_paths:
+        soma_drawing = surfaces_and_paths["soma_path"]
+    else:
+        soma_drawing = None
 
     # Check that layer polygons exist
     if len(layer_polygons) < 1:
@@ -105,6 +109,10 @@ def main(args):
     # Construct strings from paths
     pia_path = ",".join(["{},{}".format(x, y) for x, y in pia_surface["path"]])
     wm_path = ",".join(["{},{}".format(x, y) for x, y in wm_surface["path"]])
+    if soma_drawing is not None:
+        soma_path = ",".join(["{},{}".format(x, y) for x, y in soma_drawing["path"]])
+    else:
+        soma_path = None
     resolution = pia_surface["resolution"]
 
     logging.info(f"Calculating depth field")
@@ -112,19 +120,32 @@ def main(args):
         pia_path,
         wm_path,
         resolution,
+        soma_path,
     )
 
     # Calculate rotation angle from the mean of the coordinates
-    upright_angle = get_upright_angle(
-        gradient_field,
-        coord_df[coord_cols].mean(axis=0).tolist(),
-    )
+    if soma_path is not None:
+        logging.info("Using specified soma location in layer drawings file to determine upright angle")
+        upright_angle = get_upright_angle(gradient_field)
+    else:
+        logging.info("No soma location specified in layer drawings file; using coordinate centroid to determine upright angle")
+        upright_angle = get_upright_angle(
+            gradient_field,
+            coord_df[coord_cols].mean(axis=0).tolist(),
+        )
+
+    coords_to_transform = coord_df[coord_cols].values
+
+    # Translate to correct location
+    print(coords_to_transform[:5, :])
+    coords_to_transform[:, :2] = coords_to_transform[:, :2] + translation
+    print(coords_to_transform[:5, :])
 
     # get aligned y-values for coordinates
     if no_layers:
         logging.info("Calculating cortex-thickness adjusted depths for all points")
         y_values = cortex_thickness_aligned_y_values(
-            coord_df[coord_cols[0]].values, coord_df[coord_cols[1]].values,
+            coords_to_transform[:, 0], coords_to_transform[:, 1],
             avg_layer_depths, depth_field
         )
     else:
@@ -140,9 +161,10 @@ def main(args):
 
         logging.info("Calculating layer-aligned depths for all points")
         y_values = layer_aligned_y_values(
-            coord_df[coord_cols[0]].values, coord_df[coord_cols[1]].values,
+            coords_to_transform[:, 0], coords_to_transform[:, 1],
             avg_layer_depths, layer_list, depth_field, gradient_field, snapped_polys_surfs
         )
+
 
     # upright the coordinates
     rotation_upright_matrix = rotation_from_angle(upright_angle, axis=2)
@@ -150,7 +172,7 @@ def main(args):
         transform=rotation_upright_matrix
     )
     T_rotate = AffineTransform(rotation_upright_affine)
-    upright_coords = T_rotate.transform(coord_df[coord_cols].values)
+    upright_coords = T_rotate.transform(coords_to_transform)
 
     # assign new y-values
     new_coord_df = coord_df.copy()

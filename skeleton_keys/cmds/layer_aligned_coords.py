@@ -93,7 +93,7 @@ def main(args):
         no_layers = False
 
     # Load the coordinates
-    coord_df = pd.read_csv(coordinate_file, index_col=0)
+    coord_df = pd.read_csv(coordinate_file)
 
     # Names of coordinate columns
     prefix = args["coordinate_column_prefix"]

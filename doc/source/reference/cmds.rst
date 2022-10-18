@@ -93,3 +93,24 @@ dimensions where slight differences may not be relevant.
     postprocess_features.PostprocessFeaturesParameters
 
 
+``skelekeys-layer-aligned-coords``
+-------------------------------
+
+Script to layer-aligned coordinates from a general CSV file.
+
+.. autosummary::
+    :toctree: generated/
+
+    layer_aligned_coords.LayerAlignedCoordsSchema
+
+
+``skelekeys-layer-aligned-swc``
+-------------------------------
+
+Script to calculate layer-aligned depth profile histograms from a CSV with
+layer-aligned coordinates.
+
+.. autosummary::
+    :toctree: generated/
+
+    depth_profiles_from_aligned_coords.ProfilesFromAlignedCoordsParameters

@@ -31,7 +31,7 @@ from skeleton_keys.drawings import (
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.io import load_default_layer_template
-from skeleton_keys.layer_alignment import layer_aligned_y_values, cortex_thickness_aligned_y_values
+from skeleton_keys.layer_alignment import layer_aligned_y_values_for_morph, cortex_thickness_aligned_y_values_for_morph
 
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
@@ -175,7 +175,7 @@ def main(args):
     # get aligned y-values for morph
     if no_layers:
         logging.info("Calculating cortex-thickness adjusted depths for all points")
-        y_value_info = cortex_thickness_aligned_y_values(
+        y_value_info = cortex_thickness_aligned_y_values_for_morph(
             morph, avg_layer_depths, depth_field
         )
     else:
@@ -190,7 +190,7 @@ def main(args):
         )
 
         logging.info("Calculating layer-aligned depths for all points")
-        y_value_info = layer_aligned_y_values(
+        y_value_info = layer_aligned_y_values_for_morph(
             morph, avg_layer_depths, layer_list, depth_field, gradient_field, snapped_polys_surfs
         )
 

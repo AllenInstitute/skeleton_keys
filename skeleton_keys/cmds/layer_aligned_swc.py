@@ -70,6 +70,11 @@ class LayerAlignedSwcSchema(ags.ArgSchema):
         default=["Layer1", "Layer2/3", "Layer4", "Layer5", "Layer6a", "Layer6b"],
         cli_as_single_argument=True,
     )
+    swc_validation_level = ags.fields.String(
+        default="error_only",
+        description="Level of SWC validation to perform. `error_only` halts only for validation errors (not warnings or less). `strict` halts for any validation issue. `skip` does not validate SWC.",
+        validate=lambda x: x in ["error_only", "strict", "skip"],
+    )
 
 
 def main(args):
@@ -79,6 +84,21 @@ def main(args):
     swc_path = args["swc_path"]
     if swc_path is None:
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
+
+    # Load the morphology
+    morph = morphology_from_swc(swc_path)
+
+    # Validate the morphology
+    swc_validation_level = args["swc_validation_level"]
+    if swc_validation_level == "error_only":
+        morph.validate(strict=False)
+    elif swc_validation_level == "strict":
+        morph.validate(strict=True)
+    elif swc_validation_level == "skip":
+        pass
+    else:
+        raise InputError(f"swc_validation_level has value {swc_validation_level} - only 'error_only', 'strict', or 'skip' allowed")
+
 
     # Load the reference layer depths
     layer_depths_file = args['layer_depths_file']
@@ -118,9 +138,6 @@ def main(args):
         no_layers = True
     else:
         no_layers = False
-
-    # Load the morphology
-    morph = morphology_from_swc(swc_path)
 
     # Determine the streamline field and upright angle
 

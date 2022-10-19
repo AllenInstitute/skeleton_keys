@@ -61,6 +61,11 @@ class UprightCorrectedSwcSchema(ags.ArgSchema):
         allow_none=True,
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",
     )
+    swc_validation_level = ags.fields.String(
+        default="error_only",
+        description="Level of SWC validation to perform. `error_only` halts only for validation errors (not warnings or less). `strict` halts for any validation issue. `skip` does not validate SWC.",
+        validate=lambda x: x in ["error_only", "strict", "skip"],
+    )
 
 
 def soma_distance_from_pia(pia_surface, depth_field, gradient_field, translation):
@@ -106,6 +111,20 @@ def main(args):
     if swc_path is None:
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
+    # Load the morphology
+    morph = morphology_from_swc(swc_path)
+
+    # Validate the morphology
+    swc_validation_level = args["swc_validation_level"]
+    if swc_validation_level == "error_only":
+        morph.validate(strict=False)
+    elif swc_validation_level == "strict":
+        morph.validate(strict=True)
+    elif swc_validation_level == "skip":
+        pass
+    else:
+        raise InputError(f"swc_validation_level has value {swc_validation_level} - only 'error_only', 'strict', or 'skip' allowed")
+
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
     if surface_and_layers_file is not None:
@@ -123,8 +142,6 @@ def main(args):
             specimen_id, imser_id
         )
 
-    # Load the morphology
-    morph = morphology_from_swc(swc_path)
 
     # Determine the streamline field and upright angle
 

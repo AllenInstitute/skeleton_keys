@@ -31,6 +31,14 @@ class PostprocessFeaturesParameters(ags.ArgSchema):
         default=False,
         description="Whether to drop number of apical dendrite stems features",
     )
+    drop_neurite_radius_features = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop features that are calculated using the radius of neurite compartments.",
+    )
+    drop_soma_surface_area = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop the soma surface area features",
+    )
     drop_nans = ags.fields.Boolean(
         default=True,
         description="Whether to drop cells that have nan for any values",
@@ -53,6 +61,8 @@ def main(args):
     drop_stem_exit = args["drop_stem_exit"]
     drop_bifurcation_angle = args["drop_bifurcation_angle"]
     drop_apical_n_stems = args["drop_apical_n_stems"]
+    drop_neurite_radius_features = args["drop_neurite_radius_features"]
+    drop_soma_surface_area = args["drop_soma_surface_area"]
     drop_nans = args['drop_nans']
 
     if drop_stem_exit:
@@ -64,6 +74,14 @@ def main(args):
     if drop_apical_n_stems:
         mask = ((morph_df["feature"].str.startswith("calculate_number_of_stems")) &
             (morph_df["compartment_type"] == "apical_dendrite"))
+        morph_df = morph_df.loc[~mask, :]
+    if drop_neurite_radius_features:
+        mask = (morph_df["feature"].str.startswith("mean_diameter") |
+            morph_df["feature"].str.startswith("total_surface_area"))
+        morph_df = morph_df.loc[~mask, :]
+    if drop_soma_surface_area:
+        mask = ((morph_df["feature"].str.startswith("surface_area")) &
+            (morph_df["compartment_type"] == "soma"))
         morph_df = morph_df.loc[~mask, :]
 
     # log-transform number of outer bifurcations

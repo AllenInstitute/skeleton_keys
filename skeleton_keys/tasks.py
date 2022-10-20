@@ -145,4 +145,4 @@ def create_layer_histograms(
     module = argschema.ArgSchemaParser(
         schema_type=ProfilesFromAlignedSwcsParameters, input_data=input_data, args=[]
     )
-    depth_profile_main(module.args)
+    depth_profile_main(module)

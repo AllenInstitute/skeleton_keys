@@ -1,6 +1,6 @@
 from skeleton_keys.cmds.depth_profiles_from_aligned_swcs import (
-    ProfilesFromAlignedSwcsParameters, 
-    main as depth_profile_main
+    ProfilesFromAlignedSwcsParameters,
+    main as depth_profile_main,
 )
 
 from skeleton_keys.cmds.process_morphology_features import (
@@ -14,13 +14,14 @@ from taskqueue import queueable
 
 @queueable
 def create_layer_histograms(
-    specimen_id_file, 
-    swc_dir, 
-    layer_depths_file, 
-    output_hist_file, 
-    output_soma_file, 
-    bin_size=5.0, 
-    below_wm=200.0,):
+    specimen_id_file,
+    swc_dir,
+    layer_depths_file,
+    output_hist_file,
+    output_soma_file,
+    bin_size=5.0,
+    below_wm=200.0,
+):
     input_data = {
         "specimen_id_file": specimen_id_file,
         "swc_dir": swc_dir,
@@ -36,6 +37,7 @@ def create_layer_histograms(
         schema_type=ProfilesFromAlignedSwcsParameters, input_data=input_data, args=[]
     )
     depth_profile_main(module)
+
 
 @queueable
 def extract_morphology_features(

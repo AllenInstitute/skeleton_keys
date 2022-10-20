@@ -3,8 +3,11 @@ import argschema as ags
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool
+from functools import partial
 from skeleton_keys.database_queries import (
-    swc_paths_from_database
+    swc_paths_from_database,
+    shrinkage_factor_from_database,
+    pia_wm_soma_from_database,
 )
 from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
@@ -13,38 +16,37 @@ from skeleton_keys.depth_profile import (
     overlap_between_compartments,
 )
 from skeleton_keys.feature_definition import default_features
+from skeleton_keys.upright import upright_corrected_morph
 from neuron_morphology.swc_io import morphology_from_swc
 from neuron_morphology.feature_extractor.data import Data
 from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor
 from neuron_morphology.feature_extractor.utilities import unnest
-from skeleton_keys import cloudfields
+from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
+    run_streamlines,
+)
+from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 import os
-from skeleton_keys.io import write_dataframe_to_csv, read_json_file, read_csv, read_bytes
+
 
 class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
-    specimen_id_file = cloudfields.InputFile(
-        description="File with specimen IDs on each line - must specify this or specimen_id",
-        allow_none=True,
-        default=None
+    specimen_id_file = ags.fields.InputFile(
+        description="File with specimen IDs on each line",
     )
-    specimen_id = ags.fields.Integer(description="Specimen ID - use to process 1 file, must specify loadings",
-                                     allow_none=True,
-                                     default=None)
-    swc_paths_file = cloudfields.InputFile(
+    swc_paths_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="optional - JSON file with swc file paths keyed on specimen IDs",
     )
-    swc_dir = cloudfields.InputDir(
+    swc_dir = ags.fields.InputDir(
         default=None,
         allow_none=True,
         description="optional - folder to find swc files, assuming specimen_id.swc is filename",
     )
 
-    aligned_depth_profile_file = cloudfields.InputFile(
+    aligned_depth_profile_file = ags.fields.InputFile(
         description="CSV file with layer-aligned depth profile information",
     )
-    aligned_soma_file = cloudfields.InputFile(
+    aligned_soma_file = ags.fields.InputFile(
         description="CSV file with layer-aligned soma depth information",
     )
     layer_list = ags.fields.List(
@@ -69,37 +71,37 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         description="Whether to analyze depth profile of basal dendrite compartments",
         default=False,
     )
-    axon_depth_profile_loadings_file = cloudfields.InputFile(
+    axon_depth_profile_loadings_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing axon depth profile loadings",
     )
-    basal_dendrite_depth_profile_loadings_file = cloudfields.InputFile(
+    basal_dendrite_depth_profile_loadings_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing basal dendrite depth profile loadings",
     )
-    apical_dendrite_depth_profile_loadings_file = cloudfields.InputFile(
+    apical_dendrite_depth_profile_loadings_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing apical dendrite depth profile loadings",
     )
-    save_axon_depth_profile_loadings_file = cloudfields.OutputFile(
+    save_axon_depth_profile_loadings_file = ags.fields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save axon depth profile loadings",
     )
-    save_basal_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
+    save_basal_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save basal dendrite depth profile loadings",
     )
-    save_apical_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
+    save_apical_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save apical dendrite depth profile loadings",
     )
-    output_file = cloudfields.OutputFile(
+    output_file = ags.fields.OutputFile(
         default=None,
         allow_none=True,
         description="Long-form CSV of un-normalized features",
@@ -134,12 +136,12 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
     if preexisting_file is None:
         transformed, loadings = calculate_pca_transforms_and_loadings(df.values)
     else:
-        loadings = pd.read_csv(read_bytes(preexisting_file), header=None).values
+        loadings = pd.read_csv(preexisting_file, header=None).values
         transformed = apply_loadings_to_profiles(df.values, loadings)
 
     if output_file is not None:
         out_df = pd.DataFrame(loadings)
-        write_dataframe_to_csv(out_df, output_file, header=False, index=False)
+        out_df.to_csv(output_file, header=False, index=False)
 
     return transformed
 
@@ -162,7 +164,7 @@ def specimen_morph_features(
     fe_results = fe.extract(cell_data)
 
     # Determine compartments from which to keep features
-    compartments = []
+    compartments = ["soma"]
     if analyze_axon:
         compartments.append("axon")
     if analyze_basal_dendrite:
@@ -178,6 +180,7 @@ def specimen_morph_features(
         "max_euclidean_distance",
         "max_path_distance",
         "mean_contraction",
+        "num_outer_bifurcations",
     ]
     dendrite_only_features = [
         "total_surface_area",
@@ -192,10 +195,16 @@ def specimen_morph_features(
     for fullname, value in long_results.items():
         split_name = fullname.split(".")
         compartment_name = split_name[0]
-        if compartment_name not in compartments:
-            continue
 
-        primary_feature = split_name[1]
+        # neuron_morphology assigns the calculate_soma_surface.name attribute to 'calculate_soma_surface' so
+        # split_name and compartment_name are = 'calculate_soma_surface'
+        if not any([c in compartment_name for c in compartments]):
+            continue
+        if len(split_name) > 1:
+            primary_feature = split_name[1]
+        else:
+            primary_feature = split_name[0]
+
         result = {
             "specimen_id": specimen_id,
             "feature": primary_feature,
@@ -204,6 +213,12 @@ def specimen_morph_features(
         if primary_feature in unchanged_features:
             result["dimension"] = "none"
             result["value"] = value
+            result_list.append(result)
+        elif primary_feature == "calculate_soma_surface":
+            result["dimension"] = "none"
+            result["value"] = value
+            result["feature"] = "surface_area"
+            result["compartment_type"] = "soma"
             result_list.append(result)
         elif primary_feature == "soma_percentile":
             # soma percentile returned as a 2-tuple; split them into
@@ -229,7 +244,7 @@ def specimen_morph_features(
                     result["feature"] = "bias"
                     result_x = result.copy()
                     result_x["dimension"] = "x"
-                    result_x["value"] = value[0]
+                    result_x["value"] = abs(value[0])
 
                     result_y = result.copy()
                     result_y["dimension"] = "y"
@@ -245,6 +260,17 @@ def specimen_morph_features(
                     result["dimension"] = "y"
                     result["value"] = value
                     result_list.append(result)
+
+    if "early_branch_path" in long_results:
+        result_list.append(
+            {
+                "specimen_id": specimen_id,
+                "feature": "early_branch_path",
+                "compartment_type": "none",
+                "dimension": "none",
+                "value": long_results["early_branch_path"],
+            }
+        )
 
     if "basal_dendrite.calculate_stem_exit_and_distance" in long_results:
         stem_info = long_results["basal_dendrite.calculate_stem_exit_and_distance"]
@@ -300,40 +326,18 @@ def specimen_morph_features(
 
     return result_list
 
-class MorphFeatureInputError(Exception):
-    """to be raised when inputs don't make sense"""
 
 def main(args):
-    # Compartment analysis flags
-    analyze_axon_flag = args["analyze_axon"]
-    analyze_basal_flag = args["analyze_basal_dendrite"]
-    analyze_apical_flag = args["analyze_apical_dendrite"]
-    analyze_basal_dendrite_depth_flag = args["analyze_basal_dendrite_depth"]
-
-
     # Load specimen IDs
-    if args["specimen_id_file"] is not None:
-        specimen_id_file = args["specimen_id_file"]
-        specimen_ids = np.loadtxt(read_bytes(specimen_id_file)).astype(int)
-    elif args['specimen_id'] is not None:
-        specimen_ids=[args['specimen_id']]
-        if analyze_axon_flag:
-            if args['axon_depth_profile_loadings_file'] is None:
-                raise MorphFeatureInputError("you must specify axon loadings file when processing 1 cell")
-        if analyze_basal_flag and analyze_basal_dendrite_depth_flag:
-            if args['basal_dendrite_depth_profile_loadings_file'] is None:
-                raise MorphFeatureInputError("you must specify basal dendrites loadings file when processing 1 cell")
-        if analyze_apical_flag:
-            if args['apical_dendrite_depth_profile_loadings_file'] is None:
-                raise MorphFeatureInputError("you must specify apical dendrites loadings file when processing 1 cell")
-    else:
-        raise MorphFeatureInputError("you need to specify either specimen_id or a specimen_id_file")
+    specimen_id_file = args["specimen_id_file"]
+    specimen_ids = np.loadtxt(specimen_id_file, ndmin=1).astype(int)
 
     # Get paths to SWC files
     swc_paths_file = args["swc_paths_file"]
     swc_dir = args["swc_dir"]
     if swc_paths_file is not None:
-        swc_paths=read_json_file(swc_paths_file)
+        with open(swc_paths_file, "r") as f:
+            swc_paths = json.load(f)
         # ensure IDs are ints
         swc_paths = {int(k): v for k, v in swc_paths.items()}
     elif swc_dir is not None:
@@ -343,16 +347,21 @@ def main(args):
 
     # Load soma depths
     aligned_soma_file = args["aligned_soma_file"]
-    soma_loc_df = pd.read_csv(read_bytes(aligned_soma_file), index_col=0)
+    soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
     soma_loc_res = soma_locations(
         soma_loc_df.loc[soma_loc_df.index.intersection(specimen_ids), :]
     )
 
     # Load depth profiles
     aligned_depth_profile_file = args["aligned_depth_profile_file"]
-    depth_profile_df = pd.read_csv(read_bytes(aligned_depth_profile_file), index_col=0)
+    depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
 
- 
+    # Compartment analysis flags
+    analyze_axon_flag = args["analyze_axon"]
+    analyze_basal_flag = args["analyze_basal_dendrite"]
+    analyze_apical_flag = args["analyze_apical_dendrite"]
+    analyze_basal_dendrite_depth_flag = args["analyze_basal_dendrite_depth"]
+
     # Analyze depth profiles
     # Assumes that depth profile file has columns in the format:
     # "{compartment label}_{feature number}"
@@ -431,16 +440,17 @@ def main(args):
     profile_comparison_pairs = []
     if analyze_axon_flag and analyze_apical_flag:
         profile_comparison_pairs.append(
-            ("axon", "apical_dendrite", axon_depth_df.loc[available_ids,:], apical_depth_df.loc[available_ids,:])
+            ("axon", "apical_dendrite", axon_depth_df, apical_depth_df)
         )
     if analyze_axon_flag and analyze_basal_flag:
         profile_comparison_pairs.append(
-            ("axon", "basal_dendrite", axon_depth_df.loc[available_ids,:], basal_depth_df.loc[available_ids,:])
+            ("axon", "basal_dendrite", axon_depth_df, basal_depth_df)
         )
     if analyze_apical_flag and analyze_basal_flag:
         profile_comparison_pairs.append(
-            ("apical_dendrite", "basal_dendrite", apical_depth_df.loc[available_ids,:], basal_depth_df.loc[available_ids,:])
+            ("apical_dendrite", "basal_dendrite", apical_depth_df, basal_depth_df)
         )
+
     # Analyze earthmover distances and overlap between depth profiles
     profile_comparison_result = []
     for name_a, name_b, df_a, df_b in profile_comparison_pairs:
@@ -494,11 +504,9 @@ def main(args):
         )
         for specimen_id in specimen_ids
     ]
-    if len(specimen_ids)>1:
-        pool = Pool()
-        morph_results = pool.starmap(specimen_morph_features, map_input)
-    else:
-        morph_results = [specimen_morph_features(*map_input[0])]
+    pool = Pool()
+    morph_results = pool.starmap(specimen_morph_features, map_input)
+
     # Save features to CSV
     long_result = []
     long_result += soma_loc_res
@@ -506,10 +514,9 @@ def main(args):
     long_result += profile_comparison_result
     for res in morph_results:
         long_result += res
+
     output_file = args["output_file"]
-    dfout = pd.DataFrame(long_result)
-    print(dfout)
-    write_dataframe_to_csv(dfout, output_file)
+    pd.DataFrame(long_result).to_csv(output_file)
 
 
 def console_script():

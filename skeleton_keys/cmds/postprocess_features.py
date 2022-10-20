@@ -1,30 +1,20 @@
 import logging
 import re
-import glob
 import numpy as np
 import pandas as pd
 import argschema as ags
-from skeleton_keys import cloudfields
-from skeleton_keys.io import read_json_file, get_path_files, read_csv
+
 
 class PostprocessFeaturesParameters(ags.ArgSchema):
-    input_file_directory = cloudfields.InputDir(
-        default=None,
-        required=False,
-        allow_none=True,
-        description="Directory containing long-form CSV files of morphology features",
-    )
     input_files = ags.fields.List(
-        cloudfields.InputFile(),
-        default=[],
-        required=False,
+        ags.fields.InputFile(),
         cli_as_single_argument=True,
         description="Long-form CSV files of morphology features",
     )
-    wide_normalized_output_file = cloudfields.OutputFile(
+    wide_normalized_output_file = ags.fields.OutputFile(
         description="Wide-form CSV of normalized features",
     )
-    wide_unnormalized_output_file = cloudfields.OutputFile(
+    wide_unnormalized_output_file = ags.fields.OutputFile(
         description="Wide-form CSV of un-normalized features",
     )
 
@@ -41,6 +31,18 @@ class PostprocessFeaturesParameters(ags.ArgSchema):
         default=False,
         description="Whether to drop number of apical dendrite stems features",
     )
+    drop_neurite_radius_features = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop features that are calculated using the radius of neurite compartments.",
+    )
+    drop_soma_surface_area = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop the soma surface area features",
+    )
+    drop_nans = ags.fields.Boolean(
+        default=True,
+        description="Whether to drop cells that have nan for any values",
+    )
 
 
 def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -50,20 +52,8 @@ def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
 
 def main(args):
     df_list = []
-    if args["input_file_directory"] is not None:
-        input_files = get_path_files(args["input_file_directory"], regex_template=".csv$")
-        print(f'Found {len(input_files)} files in the input directory')
-    else:
-        input_files = []
-    
-    for fn in args["input_files"]:
-        input_files.append(fn)
-    
-    if len(input_files) == 0:
-        raise ValueError("No input files found!")
-    
-    for filename in input_files:
-        df = read_csv(filename, index_col=0)
+    for filename in args["input_files"]:
+        df = pd.read_csv(filename, index_col=0)
         df_list.append(df)
 
     morph_df = pd.concat(df_list)
@@ -71,6 +61,9 @@ def main(args):
     drop_stem_exit = args["drop_stem_exit"]
     drop_bifurcation_angle = args["drop_bifurcation_angle"]
     drop_apical_n_stems = args["drop_apical_n_stems"]
+    drop_neurite_radius_features = args["drop_neurite_radius_features"]
+    drop_soma_surface_area = args["drop_soma_surface_area"]
+    drop_nans = args['drop_nans']
 
     if drop_stem_exit:
         mask = ((morph_df["feature"].str.startswith("stem_exit")))
@@ -82,6 +75,14 @@ def main(args):
         mask = ((morph_df["feature"].str.startswith("calculate_number_of_stems")) &
             (morph_df["compartment_type"] == "apical_dendrite"))
         morph_df = morph_df.loc[~mask, :]
+    if drop_neurite_radius_features:
+        mask = (morph_df["feature"].str.startswith("mean_diameter") |
+            morph_df["feature"].str.startswith("total_surface_area"))
+        morph_df = morph_df.loc[~mask, :]
+    if drop_soma_surface_area:
+        mask = ((morph_df["feature"].str.startswith("surface_area")) &
+            (morph_df["compartment_type"] == "soma"))
+        morph_df = morph_df.loc[~mask, :]
 
     # log-transform number of outer bifurcations
     mask = ((morph_df["feature"].str.startswith("num_outer")))
@@ -92,18 +93,16 @@ def main(args):
                                    "compartment_type",
                                    "dimension"]).sort_index().unstack(["feature", "compartment_type", "dimension"])
 
-    print(morph_pt.shape)
-    print(morph_pt.head())
-
-    # Find and drop cells that have nans for values
-    null_rows = morph_pt.isnull().any(axis=1)
-    print(null_rows)
-    if np.sum(null_rows) > 0:
-        logging.warning("Found cells with nan values; dropping cells")
-        null_cols = morph_pt.isnull().any(axis=0)
-        print(morph_pt.columns[null_cols])
-        logging.warning(morph_pt.index[null_rows].tolist())
-        morph_pt = morph_pt.loc[~null_rows, :]
+    if drop_nans:
+        # Find and drop cells that have nans for values
+        null_rows = morph_pt.isnull().any(axis=1)
+        print(null_rows)
+        if np.sum(null_rows) > 0:
+            logging.warning("Found cells with nan values; dropping cells")
+            null_cols = morph_pt.isnull().any(axis=0)
+            print(morph_pt.columns[null_cols])
+            logging.warning(morph_pt.index[null_rows].tolist())
+            morph_pt = morph_pt.loc[~null_rows, :]
 
 
     idx = pd.IndexSlice
@@ -112,7 +111,6 @@ def main(args):
         if "hist_pc" in feat:
             continue
         values = morph_pt.loc[:, idx[:, feat, :, :]].values
-        print(feat, len(values))
         scales[feat] = values.std()
         if scales[feat] == 0: # zero std dev leads to nans
             scales[feat] = 1e-12

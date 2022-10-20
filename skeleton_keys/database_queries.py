@@ -1,6 +1,7 @@
 import os
 import logging
 import numpy as np
+import pandas as pd
 import allensdk.internal.core.lims_utilities as lu
 from functools import partial
 from neuron_morphology.marker import read_marker_file
@@ -21,6 +22,7 @@ def default_query_engine():
 
 
 def query_for_swc_file(specimen_id, query_engine=None):
+    """Get an SWC file path for a specimen ID using the specified query engine"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -44,6 +46,7 @@ def query_for_swc_file(specimen_id, query_engine=None):
 
 
 def query_for_image_series_id(specimen_id, query_engine=None):
+    """Get an image series ID for a specimen ID using the specified query engine"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -65,7 +68,7 @@ def query_for_image_series_id(specimen_id, query_engine=None):
 
 
 def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, query_engine=None):
-    """ Return the pia and white matter surface drawings for this image series
+    """ Return the pia and white matter surface drawings for an image series (and optionally specimen ID)
     """
     if query_engine is None:
         query_engine = default_query_engine()
@@ -106,7 +109,8 @@ def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, q
         elif specimen_id is not None and item["biospecimen_id"] == specimen_id:
             results[item["name"]] = data
         elif len(results[item["name"]]["path"]) < len(data["path"]):
-            if specimen_id is not None and results[item["name"]]["biospecimen_id"] == specimen_id and item["biospecimen_id"] != specimen_id:
+            if specimen_id is not None and results[item["name"]]["biospecimen_id"] == specimen_id and item[
+                "biospecimen_id"] != specimen_id:
                 # don't replace if already have a match by ID (and this isn't also a match)
                 pass
             else:
@@ -116,7 +120,7 @@ def query_for_cortical_surfaces(focal_plane_image_series_id, specimen_id=None, q
 
 
 def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine=None):
-    """ Return the soma center coordinates for this specimen
+    """ Return the soma center coordinates for an image series ID and specimen ID
     """
     if query_engine is None:
         query_engine = default_query_engine()
@@ -153,7 +157,7 @@ def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine
         return {
             "name": item["name"],
             "path": path,
-            "center": np.asarray(path).mean(axis=0),
+            "center": np.asarray(path).mean(axis=0).tolist(),
             "resolution": resolution,
         }
     else:
@@ -161,7 +165,7 @@ def query_for_soma_center(focal_plane_image_series_id, specimen_id, query_engine
 
 
 def query_marker_file(specimen_id, query_engine=None):
-    """ Return marker file path for specimen """
+    """ Return the marker file path for a specimen ID"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -180,7 +184,7 @@ def query_marker_file(specimen_id, query_engine=None):
     if len(results) > 0:
         return os.path.join(results[0]["storage_directory"], results[0]["filename"])
     else:
-        raise ValueError(f"No marker file found for specimen ID {specimen_id}")
+        return None
 
 
 def query_cell_depth(specimen_id, query_engine=None):
@@ -241,6 +245,7 @@ def query_for_layer_polygons(focal_plane_image_series_id, query_engine=None):
 
 
 def query_pinning_info(project_codes=["T301", "T301x", "mIVSCC-MET"], query_engine=None):
+    """Get the pinned CCF coordinates for a set of projects"""
     if query_engine is None:
         query_engine = default_query_engine()
 
@@ -285,7 +290,7 @@ def swc_paths_from_database(specimen_ids):
     engine = default_query_engine()
 
     paths = {int(sp_id): query_for_swc_file(int(sp_id), engine)
-        for sp_id in specimen_ids}
+             for sp_id in specimen_ids}
     return paths
 
 
@@ -317,35 +322,47 @@ def pia_wm_soma_from_database(specimen_id, imser_id):
 
     return pia_surface, wm_surface, soma_center
 
+
 def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
     """Determine shrinkage factor for morphology using database information
 
     Parameters
     ----------
+    morph : Morphology
+        Neuronal morphology
+    cut_thickness : float, default 350.
     specimen_id : int
         Specimen ID
+    cut_thickness : float, default 350.
+        The cutting thickness (in microns) of the original slice. Used
+        as an upper limit to the calculated thickness or as a fallback value
+        if the thickness cannot be determined from the morphology and markers.
 
     Returns
     -------
-    pia_path : str
-        Pia drawing path
-    wm_path : str
-        White matter drawing path
-    soma_path : str
-        Soma drawing path
-    resolution : float
-        Resolution of drawings
+    corrected_scale : float
+        The factor to multiply the z-dimension by to adjust for shrinkage
     """
     engine = default_query_engine()
     cell_depth = query_cell_depth(specimen_id, engine)
-    if cell_depth == 0 and specimen_id == 992386952: # special case for missing LIMS entry
-        cell_depth = 40.0
+
+    # special cases for missing LIMS entry
+    special_cases = {992386952: 40.0,
+                     738006528: 50.0,
+                     848629140: 37.0,
+                     848672037: 61.0,
+                     701072075: 0}
+    if cell_depth == 0 and specimen_id in special_cases.keys():
+        cell_depth = special_cases[specimen_id]
     marker_file = query_marker_file(specimen_id, engine)
 
-    markers = read_marker_file(marker_file)
+    if marker_file:
+        markers = read_marker_file(marker_file)
+    else:
+        markers = []
     soma_marker = _identify_soma_marker(morph, markers)
     soma = morph.get_soma()
-    if (soma_marker is not None) and (cell_depth is not None):
+    if (soma_marker is not None) and (cell_depth != 0) and (cell_depth is not None):
         z_level = soma_marker["z"]
         fixed_depth = np.abs(soma["z"] - z_level)
 
@@ -371,7 +388,7 @@ def shrinkage_factor_from_database(morph, specimen_id, cut_thickness=350.):
 
 
 def _identify_soma_marker(morph, markers, marker_tol=10.0):
-    soma_markers = [m for m in markers if m["name"] == 30] # 30 is the code for soma marker
+    soma_markers = [m for m in markers if m["name"] == 30]  # 30 is the code for soma marker
     soma = morph.get_soma()
     if len(soma_markers) == 0:
         soma_marker = None
@@ -446,13 +463,16 @@ def determine_flip_switch(morph, specimen_id, revised_marker_file=None, marker_t
         if specimen_id in revised_marker_paths["specimen_id"].tolist():
             logging.debug("using revised markers for {:d}".format(specimen_id))
             marker_path = revised_marker_paths.set_index("specimen_id").at[specimen_id, "revised_marker_path"]
-    markers = read_marker_file(marker_path)
+
+    if marker_path:
+        markers = read_marker_file(marker_path)
+    else:
+        markers = []
 
     info_list = []
 
-
     soma_marker = _identify_soma_marker(morph, markers, marker_tol=marker_tol)
-    flip_toggle = 1. # Assume "flipped" ie rostral surface on top by default
+    flip_toggle = 1.  # Assume "flipped" ie rostral surface on top by default
     if soma_marker is not None:
         if (soma_marker["z"] - morph.get_soma()["z"]) > 0:
             print("cut surface is to the right!")
@@ -461,7 +481,7 @@ def determine_flip_switch(morph, specimen_id, revised_marker_file=None, marker_t
         else:
             info_list.append("cut surface appears to be to the 'left' as is typical")
     else:
-            info_list.append("no soma marker to determine side of cut surface")
+        info_list.append("no soma marker to determine side of cut surface")
 
     flip_sql = f"""
         select distinct sp.id, sp.name, flip.name

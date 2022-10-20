@@ -17,12 +17,14 @@ from neuron_morphology.features.size import (
     max_euclidean_distance
 )
 from neuron_morphology.features.path import (
-    max_path_distance, mean_contraction
+    max_path_distance, mean_contraction, early_branch_path
 )
 from neuron_morphology.features.soma import (
-    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance
+    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance, calculate_soma_surface
 )
-
+from neuron_morphology.features.branching.bifurcations import (
+    num_outer_bifurcations
+)
 
 def default_features():
     """ Get set of default morphology features for feature extractor"""
@@ -37,8 +39,11 @@ def default_features():
         specialize(mean_diameter, NEURITE_SPECIALIZATIONS),
         specialize(max_euclidean_distance, NEURITE_SPECIALIZATIONS),
         specialize(max_path_distance, NEURITE_SPECIALIZATIONS),
+        specialize(num_outer_bifurcations, NEURITE_SPECIALIZATIONS),
         specialize(mean_contraction, NEURITE_SPECIALIZATIONS),
         specialize(soma_percentile, NEURITE_SPECIALIZATIONS),
         specialize(calculate_number_of_stems, [BasalDendriteSpec]),
-        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec])
+        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec]),
+        calculate_soma_surface,
+        early_branch_path,
     ]

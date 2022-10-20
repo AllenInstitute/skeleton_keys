@@ -38,6 +38,9 @@ class OutputFile(mm.fields.Str):
             or writing a temporary file there produces any crazy exception
         """
         if "://" not in value:
+            dir, _ = os.path.split(value)
+            if len(dir) == 0:
+                value = './' + value 
             value = "file://" + value
         cloudpath, file = os.path.split(value)
         cf = cloudfiles.CloudFiles(cloudpath)

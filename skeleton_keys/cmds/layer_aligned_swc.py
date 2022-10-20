@@ -142,11 +142,13 @@ def main(args):
     # Correct for shrinkage and/or slice angle if requested
     if args["correct_for_shrinkage"] or args["correct_for_slice_angle"]:
         if args["correct_for_shrinkage"]:
+            logging.info("Calculating shrinkage correction factor")
             shrink_factor = shrinkage_factor_from_database(morph, specimen_id)
         else:
             shrink_factor = 1
 
         if args["correct_for_slice_angle"]:
+            logging.info("Determining slice angle")
             pin_df = pd.DataFrame.from_records(query_pinning_info())
             slice_angle = slice_angle_tilt(
                 pin_df,

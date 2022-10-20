@@ -210,6 +210,7 @@ def layer_aligned_y_values(x, y, avg_layer_depths, layer_list,
 
     pts_in_wm = 0
     logging.info("processing points outside layers")
+    outside_values = np.zeros_like(y_values[mask_outside_layers])
     for i, (pt_x, pt_y) in enumerate(all_pos[mask_outside_layers, :]):
         # check if it's within the wm
         pia_tri = shapely.geometry.Polygon([pia_coords[0], pia_coords[-1], (pt_x, pt_y)])
@@ -219,18 +220,18 @@ def layer_aligned_y_values(x, y, avg_layer_depths, layer_list,
             # likely below white matter border, but check if it's closer to wm than pia
             if pia.distance(node_pt) < wm.distance(node_pt):
                 # not in white matter since closer to pia
-                y_values[mask_outside_layers][i] = np.nan
+                outside_values[i] = np.nan
                 continue
         elif wm.convex_hull.contains(node_pt):
             # in white matter, but where triangles don't overlap
             pass
         else:
             # not in white matter
-            y_values[mask_outside_layers][i] = np.nan
+            outside_values[i] = np.nan
             continue
         pts_in_wm += 1
-        y_values[mask_outside_layers][i] = -avg_layer_depths["wm"] - node_pt.distance(wm)
-
+        outside_values[i] = -avg_layer_depths["wm"] - node_pt.distance(wm)
+    y_values[mask_outside_layers] = outside_values
     logging.info(f"points in wm: {pts_in_wm}")
     unassigned = len(y) - pts_in_wm - running_total
     if unassigned > 0:

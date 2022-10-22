@@ -147,14 +147,13 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
 
 
 def specimen_morph_features(
-    specimen_id,
-    swc_path,
-    layer_list,
-    analyze_axon,
-    analyze_apical_dendrite,
-    analyze_basal_dendrite,
+        specimen_id,
+        swc_path,
+        layer_list,
+        analyze_axon,
+        analyze_apical_dendrite,
+        analyze_basal_dendrite,
 ):
-
     # Load the morphology and transform if necessary
     morph = morphology_from_swc(swc_path)
 
@@ -181,6 +180,7 @@ def specimen_morph_features(
         "max_path_distance",
         "mean_contraction",
         "num_outer_bifurcations",
+        "early_branch_path"
     ]
     dendrite_only_features = [
         "total_surface_area",
@@ -231,9 +231,16 @@ def specimen_morph_features(
             result_y["dimension"] = "y"
             result_y["value"] = value[1]
             result_list += [result_x, result_y]
+        elif primary_feature == "moments_along_max_distance_projection" and (
+                split_name[-1] == "mean" or split_name[-1] == "std"):
+            statistical_metric = split_name[-1]
+            result["feature"] = f"{statistical_metric}_{result['feature']}"
+            result["dimension"] = "none"
+            result["value"] = value
+            result_list.append(result)
         elif primary_feature in dendrite_only_features and compartment_name in (
-            "basal_dendrite",
-            "apical_dendrite",
+                "basal_dendrite",
+                "apical_dendrite",
         ):
             result["dimension"] = "none"
             result["value"] = value

@@ -1,0 +1,24 @@
+name: skeleton_keys
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - fenics-dolfinx
+  - fenics-libdolfinx
+  - gmsh
+  - hdf5
+  - h5py
+  - Jinja2>=3.0
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - shapely
+  - geopandas
+  - rasterio
+  - pip:
+      - allensdk
+      - argschema
+      - git+https://github.com/AllenInstitute/neuron_morphology@science_staging[streamlines]
+      - git+https://github.com/AllenInstitute/ccf_streamlines.git

@@ -1,0 +1,11 @@
+numpy
+scipy
+pandas
+scikit-learn
+git+https://github.com/AllenInstitute/neuron_morphology@science_staging[streamlines]
+argschema
+allensdk
+shapely
+geopandas
+git+https://github.com/AllenInstitute/ccf_streamlines.git
+rasterio

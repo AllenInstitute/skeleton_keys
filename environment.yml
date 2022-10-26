@@ -6,19 +6,25 @@ dependencies:
   - pip
   - fenics-dolfinx
   - fenics-libdolfinx
-  - gmsh
+  - python-gmsh
   - hdf5
   - h5py
   - Jinja2>=3.0
-  - numpy
+  - numpy>=1.14.2
   - scipy
   - pandas
   - scikit-learn
   - shapely
+  - imageio
+  - pg8000<2.0.0
+  - boto3>=1.12.42
   - geopandas
   - rasterio
+  - openjpeg
+  - six
   - pip:
       - allensdk
       - argschema
-      - git+https://github.com/AllenInstitute/neuron_morphology@science_staging[streamlines]
-      - git+https://github.com/AllenInstitute/ccf_streamlines.git
+      - ccf-streamlines
+      - cloud-files
+      - argschema==3.0.1

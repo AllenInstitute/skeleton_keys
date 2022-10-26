@@ -2,10 +2,10 @@ numpy
 scipy
 pandas
 scikit-learn
-git+https://github.com/AllenInstitute/neuron_morphology@science_staging[streamlines]
+git+https://github.com/AllenInstitute/neuron_morphology@science_staging
 argschema
 allensdk
 shapely
 geopandas
-git+https://github.com/AllenInstitute/ccf_streamlines.git
+ccf-streamlines
 rasterio

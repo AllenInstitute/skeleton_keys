@@ -7,7 +7,7 @@ from neuron_morphology.snap_polygons.geometries import (
     get_snapped_polys, find_vertical_surfaces, select_largest_subpolygon
 )
 from neuron_morphology.transforms.geometry import get_vertices_from_two_lines
-from shapely.geometry.polygon import Polygon, LineString
+from shapely.geometry.polygon import Polygon, LineString, orient
 
 
 def snap_hand_drawn_polygons(
@@ -144,11 +144,10 @@ def simplify_and_find_corners(perimeter, tolerance=2, n_corners=4):
     """
 
     # Simplify perimeter
-    simple_perim = perimeter.simplify(tolerance=tolerance)
-    vertex_angles = angles_around_polygon(simple_perim)
+    simple_perim = orient(perimeter.simplify(tolerance=tolerance))
 
-    # Find angles nearest to 90 degrees
-    corner_inds = np.sort(np.argsort(np.abs(vertex_angles - np.pi / 2))[:n_corners])
+    # Try to find corners
+    corner_inds = _assign_corners(simple_perim)
 
     return simple_perim, corner_inds
 
@@ -164,6 +163,65 @@ def angles_around_polygon(poly):
 
     return np.hstack([angles[-1], angles[:-1]])
 
+
+def _assign_corners(perimeter):
+    perim_coords = np.array(perimeter.exterior.coords)
+    vertex_angles = angles_around_polygon(perimeter)
+    enclosing_rect = perimeter.minimum_rotated_rectangle
+
+    rect_coords = np.array(enclosing_rect.exterior.coords)
+
+    angle_diff = np.abs(vertex_angles + np.pi / 2)
+    sorted_angle_inds = np.argsort(angle_diff)
+    keep_going = True
+    corners_guess = np.sort(sorted_angle_inds[:4])
+    next_guess_ind = 4
+    best_score = np.inf
+    full_dists_to_rect = distance.cdist(perim_coords, rect_coords)
+    while(keep_going):
+        total_dist = distances_for_guess(full_dists_to_rect, corners_guess)
+        print("-------")
+        print(corners_guess)
+        print(total_dist, np.sum(total_dist))
+
+        # try next point - sub for each
+        best_guess_set = None
+        best_guess_score = np.inf
+        for i in range(4):
+            new_guess = corners_guess.copy()
+            new_guess[i] = sorted_angle_inds[next_guess_ind]
+            new_guess = np.sort(new_guess)
+            print("new try", new_guess)
+            new_dist = distances_for_guess(full_dists_to_rect, new_guess)
+            print(new_dist, np.sum(new_dist))
+            if np.sum(new_dist) < best_guess_score:
+                best_guess_score = np.sum(new_dist)
+                best_guess_set = new_guess
+
+        if best_guess_score < np.sum(total_dist):
+            keep_going = True
+            next_guess_ind += 1
+            corners_guess = best_guess_set
+        else:
+            keep_going = False
+
+    return corners_guess
+
+def _distances_for_corner_guess(dist_mat, corners_guess):
+    distances_to_rect = dist_mat[corners_guess, :]
+
+    # Find corner closest to rectangle corner
+    closest_rect = np.argmin(np.min(distances_to_rect, axis=0))
+    closest_corner_ind = np.argmin(distances_to_rect[:, closest_rect])
+
+    # Assign corners in order starting from closest
+    assignments = [(corners_guess[i % 4], r % 4)
+                   for i, r in zip(range(closest_corner_ind, closest_corner_ind + 4),
+                                   range(closest_rect, closest_rect + 4))]
+    total_dist = []
+    for a in assignments:
+        total_dist.append(dist_mat[a[0], a[1]])
+    return total_dist
 
 def identify_pia_and_wm_sides(perimeter, corners, boundaries):
     """ Find pia and wm sides
@@ -242,3 +300,23 @@ def identify_pia_and_wm_sides(perimeter, corners, boundaries):
 
     return pia_side, wm_side
 
+def simplify_layer_boundaries(boundaries, tolerance):
+    """ Simplify layer boundary drawings
+
+    Parameters
+    ----------
+    boundaries : dict
+        Dictionary with layer names as keys and boundary coordinates as values
+    tolerance : float
+        Tolerance parameter for shapely's Polygon.simplify()
+
+    Returns
+    -------
+    simplified_boundaries : dict
+        Dictionary with layer names as keys and simplified boundary coordinates as values
+    """
+    simplified_boundaries = {}
+    for k, v in boundaries.items():
+        b_poly = Polygon(v).simplify(tolerance=tolerance)
+        simplified_boundaries[k] = np.array(b_poly.exterior.coords)
+    return simplified_boundaries

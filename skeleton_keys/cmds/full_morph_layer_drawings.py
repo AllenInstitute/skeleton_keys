@@ -119,12 +119,15 @@ def main(args):
         "resolution": 1.0,
         "path": [rot_soma_coords],
     }
+
+    simplifed_boundaries = drawings.simplify_layer_boundaries(
+        boundaries, args['layer_simplify_tolerance'])
     drawing_data['layer_polygons'] = []
-    for n, b in boundaries.items():
+    for n, b in simplifed_boundaries.items():
         drawing_data['layer_polygons'].append({
             "name": name_translation[n],
             "resolution": 1.0,
-            "path": (b * resolution).tolist(),
+            "path": (b_coords * resolution).tolist(),
         })
 
     # Write output files

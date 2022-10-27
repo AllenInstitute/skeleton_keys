@@ -393,7 +393,7 @@ def main(args):
             args["axon_depth_profile_loadings_file"],
             args["save_axon_depth_profile_loadings_file"],
         )
-        for i, sp_id in enumerate(specimen_ids):
+        for i, sp_id in enumerate(available_ids):
             for j in range(transformed.shape[1]):
                 depth_result.append(
                     {

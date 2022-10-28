@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import json
-from skeleton_keys.io import load_swc_as_dataframe
+from skeleton_keys.io import load_swc_as_dataframe, load_default_layer_template
 
 
 class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
@@ -15,7 +15,7 @@ class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
     )
     layer_depths_file = ags.fields.InputFile(
         description="JSON file with layer depths; used to establish bins for profile histogram",
-        default="avg_layer_depths.json")
+        default=None, allow_none=True)
     bin_size = ags.fields.Float(description="bin size, in microns", default=5.0)
     below_wm = ags.fields.Float(description="extent below white matter to include, in microns", default=200.0)
     output_hist_file = ags.fields.OutputFile(
@@ -31,12 +31,15 @@ def main():
 
     # Load the specimen IDs
     specimen_id_file = module.args['specimen_id_file']
-    specimen_ids = np.loadtxt(specimen_id_file, dtype=int)
+    specimen_ids = np.loadtxt(specimen_id_file, dtype=int, ndmin=1)
 
     # Load the layer info
     layer_depths_file = module.args['layer_depths_file']
-    with open(layer_depths_file, "r") as f:
-        avg_layer_depths = json.load(f)
+    if layer_depths_file:
+        with open(layer_depths_file, "r") as f:
+            avg_layer_depths = json.load(f)
+    else:
+        avg_layer_depths = load_default_layer_template()
 
     # Get directory with layer-aligned SWCs
     swc_dir = module.args['swc_dir']

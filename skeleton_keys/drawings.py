@@ -79,6 +79,7 @@ def snap_hand_drawn_polygons(
 
 
 def convert_and_translate_snapped_to_microns(polys_surfs, res, translation):
+    """ Convert surfaces and layers from pixels to microns and translate to specified location"""
     surfs = []
     for s in polys_surfs["surfaces"]:
         path_coords = np.asarray(s["path"])

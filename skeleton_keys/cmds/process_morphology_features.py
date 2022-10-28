@@ -147,14 +147,13 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
 
 
 def specimen_morph_features(
-    specimen_id,
-    swc_path,
-    layer_list,
-    analyze_axon,
-    analyze_apical_dendrite,
-    analyze_basal_dendrite,
+        specimen_id,
+        swc_path,
+        layer_list,
+        analyze_axon,
+        analyze_apical_dendrite,
+        analyze_basal_dendrite,
 ):
-
     # Load the morphology and transform if necessary
     morph = morphology_from_swc(swc_path)
 
@@ -164,7 +163,7 @@ def specimen_morph_features(
     fe_results = fe.extract(cell_data)
 
     # Determine compartments from which to keep features
-    compartments = []
+    compartments = ["soma"]
     if analyze_axon:
         compartments.append("axon")
     if analyze_basal_dendrite:
@@ -180,6 +179,8 @@ def specimen_morph_features(
         "max_euclidean_distance",
         "max_path_distance",
         "mean_contraction",
+        "num_outer_bifurcations",
+        "early_branch_path"
     ]
     dendrite_only_features = [
         "total_surface_area",
@@ -194,10 +195,16 @@ def specimen_morph_features(
     for fullname, value in long_results.items():
         split_name = fullname.split(".")
         compartment_name = split_name[0]
-        if compartment_name not in compartments:
-            continue
 
-        primary_feature = split_name[1]
+        # neuron_morphology assigns the calculate_soma_surface.name attribute to 'calculate_soma_surface' so
+        # split_name and compartment_name are = 'calculate_soma_surface'
+        if not any([c in compartment_name for c in compartments]):
+            continue
+        if len(split_name) > 1:
+            primary_feature = split_name[1]
+        else:
+            primary_feature = split_name[0]
+
         result = {
             "specimen_id": specimen_id,
             "feature": primary_feature,
@@ -206,6 +213,12 @@ def specimen_morph_features(
         if primary_feature in unchanged_features:
             result["dimension"] = "none"
             result["value"] = value
+            result_list.append(result)
+        elif primary_feature == "calculate_soma_surface":
+            result["dimension"] = "none"
+            result["value"] = value
+            result["feature"] = "surface_area"
+            result["compartment_type"] = "soma"
             result_list.append(result)
         elif primary_feature == "soma_percentile":
             # soma percentile returned as a 2-tuple; split them into
@@ -218,9 +231,16 @@ def specimen_morph_features(
             result_y["dimension"] = "y"
             result_y["value"] = value[1]
             result_list += [result_x, result_y]
+        elif primary_feature == "moments_along_max_distance_projection" and (
+                split_name[-1] == "mean" or split_name[-1] == "std"):
+            statistical_metric = split_name[-1]
+            result["feature"] = f"{statistical_metric}_{result['feature']}"
+            result["dimension"] = "none"
+            result["value"] = value
+            result_list.append(result)
         elif primary_feature in dendrite_only_features and compartment_name in (
-            "basal_dendrite",
-            "apical_dendrite",
+                "basal_dendrite",
+                "apical_dendrite",
         ):
             result["dimension"] = "none"
             result["value"] = value
@@ -247,6 +267,17 @@ def specimen_morph_features(
                     result["dimension"] = "y"
                     result["value"] = value
                     result_list.append(result)
+
+    if "early_branch_path" in long_results:
+        result_list.append(
+            {
+                "specimen_id": specimen_id,
+                "feature": "early_branch_path",
+                "compartment_type": "none",
+                "dimension": "none",
+                "value": long_results["early_branch_path"],
+            }
+        )
 
     if "basal_dendrite.calculate_stem_exit_and_distance" in long_results:
         stem_info = long_results["basal_dendrite.calculate_stem_exit_and_distance"]
@@ -306,7 +337,7 @@ def specimen_morph_features(
 def main(args):
     # Load specimen IDs
     specimen_id_file = args["specimen_id_file"]
-    specimen_ids = np.loadtxt(specimen_id_file).astype(int)
+    specimen_ids = np.loadtxt(specimen_id_file, ndmin=1).astype(int)
 
     # Get paths to SWC files
     swc_paths_file = args["swc_paths_file"]

@@ -54,7 +54,7 @@ class CalcHistogramLoadingsParameters(ags.ArgSchema):
 def main(args):
     # Load specimen IDs
     specimen_id_file = args["specimen_id_file"]
-    specimen_ids = np.loadtxt(specimen_id_file).astype(int)
+    specimen_ids = np.loadtxt(specimen_id_file, ndmin=1).astype(int)
 
     # Load depth profiles
     aligned_depth_profile_file = args["aligned_depth_profile_file"]

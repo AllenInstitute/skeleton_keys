@@ -28,3 +28,4 @@ dependencies:
       - ccf-streamlines
       - cloud-files
       - argschema==3.0.1
+      - task-queue

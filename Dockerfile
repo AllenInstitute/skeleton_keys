@@ -1,6 +1,10 @@
 FROM condaforge/mambaforge:4.9.2-5 as conda
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
-RUN apt-get -y install libglu1 libxcursor-dev libxft2 libxinerama1 libfltk1.3-dev libfreetype6-dev libgl1-mesa-dev 
+RUN apt-get update && \
+    apt-get install -y build-essential libglu1 \
+    libxcursor-dev libxft2 libxinerama1 \
+    libfltk1.3-dev libfreetype6-dev \
+    libgl1-mesa-dev  && \
+    rm -rf /var/lib/apt/lists/*
 RUN mamba install -y -c conda-forge conda-lock conda-pack
 COPY conda-lock.yml .
 RUN conda-lock install --name skeleton_keys conda-lock.yml

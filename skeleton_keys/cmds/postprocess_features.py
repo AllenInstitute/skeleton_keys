@@ -41,6 +41,18 @@ class PostprocessFeaturesParameters(ags.ArgSchema):
         default=False,
         description="Whether to drop number of apical dendrite stems features",
     )
+    drop_neurite_radius_features = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop features that are calculated using the radius of neurite compartments.",
+    )
+    drop_soma_surface_area = ags.fields.Boolean(
+        default=False,
+        description="Whether to drop the soma surface area features",
+    )
+    drop_nans = ags.fields.Boolean(
+        default=True,
+        description="Whether to drop cells that have nan for any values",
+    )
 
 
 def _natural_sort_key(s, _nsre=re.compile('([0-9]+)')):
@@ -71,6 +83,9 @@ def main(args):
     drop_stem_exit = args["drop_stem_exit"]
     drop_bifurcation_angle = args["drop_bifurcation_angle"]
     drop_apical_n_stems = args["drop_apical_n_stems"]
+    drop_neurite_radius_features = args["drop_neurite_radius_features"]
+    drop_soma_surface_area = args["drop_soma_surface_area"]
+    drop_nans = args['drop_nans']
 
     if drop_stem_exit:
         mask = ((morph_df["feature"].str.startswith("stem_exit")))
@@ -82,6 +97,14 @@ def main(args):
         mask = ((morph_df["feature"].str.startswith("calculate_number_of_stems")) &
             (morph_df["compartment_type"] == "apical_dendrite"))
         morph_df = morph_df.loc[~mask, :]
+    if drop_neurite_radius_features:
+        mask = (morph_df["feature"].str.startswith("mean_diameter") |
+            morph_df["feature"].str.startswith("total_surface_area"))
+        morph_df = morph_df.loc[~mask, :]
+    if drop_soma_surface_area:
+        mask = ((morph_df["feature"].str.startswith("surface_area")) &
+            (morph_df["compartment_type"] == "soma"))
+        morph_df = morph_df.loc[~mask, :]
 
     # log-transform number of outer bifurcations
     mask = ((morph_df["feature"].str.startswith("num_outer")))
@@ -92,18 +115,16 @@ def main(args):
                                    "compartment_type",
                                    "dimension"]).sort_index().unstack(["feature", "compartment_type", "dimension"])
 
-    print(morph_pt.shape)
-    print(morph_pt.head())
-
-    # Find and drop cells that have nans for values
-    null_rows = morph_pt.isnull().any(axis=1)
-    print(null_rows)
-    if np.sum(null_rows) > 0:
-        logging.warning("Found cells with nan values; dropping cells")
-        null_cols = morph_pt.isnull().any(axis=0)
-        print(morph_pt.columns[null_cols])
-        logging.warning(morph_pt.index[null_rows].tolist())
-        morph_pt = morph_pt.loc[~null_rows, :]
+    if drop_nans:
+        # Find and drop cells that have nans for values
+        null_rows = morph_pt.isnull().any(axis=1)
+        print(null_rows)
+        if np.sum(null_rows) > 0:
+            logging.warning("Found cells with nan values; dropping cells")
+            null_cols = morph_pt.isnull().any(axis=0)
+            print(morph_pt.columns[null_cols])
+            logging.warning(morph_pt.index[null_rows].tolist())
+            morph_pt = morph_pt.loc[~null_rows, :]
 
 
     idx = pd.IndexSlice
@@ -112,7 +133,6 @@ def main(args):
         if "hist_pc" in feat:
             continue
         values = morph_pt.loc[:, idx[:, feat, :, :]].values
-        print(feat, len(values))
         scales[feat] = values.std()
         if scales[feat] == 0: # zero std dev leads to nans
             scales[feat] = 1e-12

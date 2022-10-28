@@ -82,7 +82,7 @@ def corrected_without_uprighting_morph(
     shrink_factor):
     """ Correct for shrinkage and slice angle without uprighting
 
-    Note, though, that upright_angle must be provided so that the slice angle
+    Note, though, that `upright_angle` must be provided so that the slice angle
     corrections are correctly applied
 
     Parameters
@@ -101,7 +101,7 @@ def corrected_without_uprighting_morph(
     Returns
     -------
     corrected_morph : Morphology
-        Morphology in upright orientation after correcting for shrinkage
+        Morphology in original orientation after correcting for shrinkage
         and slice angle
     """
     morphology = upright_corrected_morph(

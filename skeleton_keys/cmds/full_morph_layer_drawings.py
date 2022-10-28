@@ -22,6 +22,11 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
         cli_as_single_argument=True,
         description="List of structure acronyms to include around morphology",
     )
+    base_orientation = ags.fields.String(
+        default='coronal',
+        description='start with either a coronal or parasagittal orientation',
+        validation=lambda x: x in ['coronal', 'parasagittal'],
+    )
     closest_surface_voxel_file = ags.fields.InputFile(
         description="Closest surface voxel reference HDF5 file for slice angle calculation",
     )
@@ -50,16 +55,19 @@ def main(args):
 
     atlas_volume, _ = nrrd.read(args["atlas_volume_file"])
 
+    base_orientation = args['base_orientation']
+
     atlas_slice, angle_rad = full_morph.angled_atlas_slice_for_morph(
         morph,
         atlas_volume,
         args["closest_surface_voxel_file"],
         args["surface_paths_file"],
+        base_orientation=base_orientation,
         return_angle=True,
     )
 
     rot_morph = full_morph.rotate_morphology_for_drawings(
-        morph, angle_rad)
+        morph, angle_rad, base_orientation)
 
     reference_space_key = 'annotation/ccf_2017'
     resolution = 10
@@ -73,10 +81,11 @@ def main(args):
     )
     atlas_slice = full_morph.merge_atlas_layers(atlas_slice, tree)
 
-    atlas_slice = full_morph.remove_other_hemisphere(
-        atlas_slice,
-        soma_coords
-    )
+    if base_orientation == 'coronal':
+        atlas_slice = full_morph.remove_other_hemisphere(
+            atlas_slice,
+            soma_coords
+        )
 
     boundaries = full_morph.find_layer_outlines(atlas_slice)
     perimeter = drawings.perimeter_of_layers(boundaries)
@@ -127,7 +136,7 @@ def main(args):
         drawing_data['layer_polygons'].append({
             "name": name_translation[n],
             "resolution": 1.0,
-            "path": (b_coords * resolution).tolist(),
+            "path": (b * resolution).tolist(),
         })
 
     # Write output files

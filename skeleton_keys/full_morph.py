@@ -1,36 +1,63 @@
+import logging
 import numpy as np
-from ccf_streamlines.angle import find_closest_streamline, determine_angle_between_streamline_and_plane
+from ccf_streamlines.angle import find_closest_streamline
 from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle, affine_from_transform_translation, affine_from_translation, AffineTransform
 )
 from allensdk.core.reference_space_cache import ReferenceSpaceCache
 from skimage.measure import find_contours
 from scipy.interpolate import interpn
+from scipy.spatial.distance import euclidean
 
 
-def rotate_morphology_for_drawings(morphology, angle_for_atlas_slice):
+def rotate_morphology_for_drawings(morphology, angle_for_atlas_slice, base_orientation='coronal'):
     """ Rotate a whole-brain morphology to line up with angled atlas image
 
     In the CCF, x is anterior/posterior, y is dorsal/ventral, and z is left/right
-    In the new atlas slice, though, the first dimension is (primarily) dorsal/ventral and the
-    second is left/right. This function both tilts the morphology to line up
-    with the atlas slice and swaps the coordinates so that the first dimension
-    is also (primarily) dorsal/ventral, the second is left/right, and the third is
-    (angled) anterior/posterior
+
+    In a near-coronal slice, though, the first dimension is (primarily) dorsal/ventral and the
+    second is left/right.
+
+    In a near-parasaggital slice, the first dimension is dorsal/ventral and the second is
+    anterior/posterior.
+
+    This function both tilts the morphology to line up
+    with the atlas slice and swaps the coordinates so that the dimensions are
+    correctly matched up.
 
     Parameters
     ----------
-        morphology : Morphology
-            Full brain morphology, aligned to CCF (micron scale)
-        angle_for_atlas_slice : float
-            Angle of atlas slice to align to streamline (radians)
+    morphology : Morphology
+        Full brain morphology, aligned to CCF (micron scale)
+    angle_for_atlas_slice : float
+        Angle of atlas slice to align to streamline (radians)
+    base_orientation : str, default 'coronal'
+        Initial slice orientation - either 'coronal' or 'parasagittal'
 
     Returns
     -------
-        morphology : Morphology
-            Rotated morphology with soma in original location
+    morphology : Morphology
+        Rotated morphology with soma in original location
 
     """
+
+    if base_orientation == 'coronal':
+        rot_axis = 2
+        coordinate_swap_matrix = np.array([
+            [0, 0, 1],
+            [1, 0, 0],
+            [0, 1, 0],
+        ]).T
+    elif base_orientation == 'parasagittal':
+        rot_axis = 1
+        coordinate_swap_matrix = np.array([
+            [0, 1, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+        ]).T
+    else:
+        raise ValueError("base_orientation must be 'coronal' or 'parasagittal'")
+
     # center on soma before tilt
     soma_morph = morphology.get_soma()
     translation_to_origin = np.array([-soma_morph['x'], -soma_morph["y"], -soma_morph["z"]])
@@ -41,7 +68,7 @@ def rotate_morphology_for_drawings(morphology, angle_for_atlas_slice):
     T_translate.transform_morphology(morphology)
 
     # Rotate
-    rotation_tilt_matrix = rotation_from_angle(angle_for_atlas_slice, axis=2)
+    rotation_tilt_matrix = rotation_from_angle(-angle_for_atlas_slice, axis=rot_axis)
     rotation_tilt_affine = affine_from_transform_translation(transform=rotation_tilt_matrix)
     T_rotate = AffineTransform(rotation_tilt_affine)
     T_rotate.transform_morphology(morphology)
@@ -52,11 +79,6 @@ def rotate_morphology_for_drawings(morphology, angle_for_atlas_slice):
     T_translate.transform_morphology(morphology)
 
     # Swap coordinates
-    coordinate_swap_matrix = np.array([
-        [0, 0, 1],
-        [1, 0, 0],
-        [0, 1, 0],
-    ]).T
     swap_affine = affine_from_transform_translation(transform=coordinate_swap_matrix)
     T_swap = AffineTransform(swap_affine)
     T_swap.transform_morphology(morphology)
@@ -64,8 +86,24 @@ def rotate_morphology_for_drawings(morphology, angle_for_atlas_slice):
     return morphology
 
 
+def _angle_between_streamline_and_plane(streamline_coords, norm_vec):
+    norm_unit = norm_vec / euclidean(norm_vec, [0, 0, 0])
+
+    streamline_wm = streamline_coords[-1, :]
+    streamline_pia = streamline_coords[0, :]
+    streamline_unit = (streamline_pia - streamline_wm) / euclidean(streamline_pia, streamline_wm)
+
+    angle_with_norm = np.arctan2(
+        np.linalg.norm(np.cross(norm_unit, streamline_unit)),
+        np.dot(norm_unit, streamline_unit))
+
+    # Take complement and convert from radians to degrees
+    return 90. - (angle_with_norm * 180. / np.pi)
+
+
 def angled_atlas_slice_for_morph(morph, atlas_volume,
         closest_surface_voxel_reference_file, surface_paths_file,
+        base_orientation='coronal',
         atlas_resolution=10., return_angle=True):
     """ Create an angled atlas slice lined up with a cell's streamline
 
@@ -79,16 +117,19 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
         Closest surface voxel reference HDF5 file path for angle calculation
     surface_paths_file : str
         Surface paths (streamlines) HDF5 file path for slice angle calculation
+    base_orientation : str, default 'coronal'
+        Initial slice orientation - either 'coronal' or 'parasagittal'
     atlas_resolution : float, default 10
         Voxel size of atlas volume (microns)
     return_angle : bool, default True
         Whether to return the slice angle as well as the slice
 
     Returns
-        atlas_slice : 2D array
-            Angled atlas slice with CCF region IDs as values
-        angle_rad : float
-            Angle of slice from coronal plane (radians)
+    -------
+    atlas_slice : 2D array
+        Angled atlas slice with CCF region IDs as values
+    angle_rad : float
+        Angle of slice from coronal plane (radians)
     """
 
     morph_soma = morph.get_soma()
@@ -98,27 +139,42 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
     morph_streamline = find_closest_streamline(
         soma_coords, closest_surface_voxel_reference_file, surface_paths_file)
 
-    # Transform representing a coronal section
-    plane_transform = np.array([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-    ])
+    if base_orientation == 'coronal':
+        norm_vec = [1, 0, 0]
+    elif base_orientation == 'parasagittal':
+        norm_vec = [0, 0, -1]
+    else:
+        raise ValueError("base_orientation must be 'coronal' or 'parasagittal'")
 
     # Get angle between coronal section and cell's streamline
-    angle_deg = determine_angle_between_streamline_and_plane(morph_streamline, plane_transform)
+    angle_deg = _angle_between_streamline_and_plane(morph_streamline, norm_vec)
+    logging.info(f"Tilting by {angle_deg} degrees from {base_orientation} plane")
+
     angle_rad = angle_deg * np.pi / 180.
 
-    # Set up a grid representing a coronal section at the level of the cell body
     soma_coords_for_atlas = soma_coords / atlas_resolution
-    coronal_grid = np.meshgrid(soma_coords_for_atlas[0],
-        np.arange(0, atlas_volume.shape[1], 1),
-        np.arange(0, atlas_volume.shape[2], 1),
-    )
-    mesh_coords = np.array([coronal_grid[0].flatten(), coronal_grid[1].flatten(), coronal_grid[2].flatten()])
+
+    if base_orientation == 'coronal':
+        # Set up a grid representing a coronal section at the level of the cell body
+        slice_grid = np.meshgrid(
+            soma_coords_for_atlas[0],
+            np.arange(0, atlas_volume.shape[1], 1),
+            np.arange(0, atlas_volume.shape[2], 1),
+        )
+        rot_axis = 2
+        reshape_size = (atlas_volume.shape[1], atlas_volume.shape[2])
+    elif base_orientation == 'parasagittal':
+        slice_grid = np.meshgrid(
+            np.arange(0, atlas_volume.shape[0], 1),
+            np.arange(0, atlas_volume.shape[1], 1),
+            soma_coords_for_atlas[2],
+        )
+        rot_axis = 0
+        reshape_size = (atlas_volume.shape[1], atlas_volume.shape[0])
+    mesh_coords = np.array([slice_grid[0].flatten(), slice_grid[1].flatten(), slice_grid[2].flatten()])
 
     # Rotate the mesh
-    M = rotation_from_angle(-angle_rad, axis=2)
+    M = rotation_from_angle(angle_rad, axis=rot_axis)
     rot_mesh_coords = (M @ (mesh_coords - soma_coords_for_atlas[:, np.newaxis])).T + soma_coords_for_atlas
 
     # Get an interpolated slice through the mesh. Use nearest method since
@@ -133,7 +189,8 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
         atlas_volume,
         rot_mesh_coords,
         method='nearest').astype(int)
-    atlas_slice = atlas_slice.reshape(atlas_volume.shape[1], atlas_volume.shape[2])
+
+    atlas_slice = atlas_slice.reshape(reshape_size)
 
     if return_angle:
         return atlas_slice, angle_rad

@@ -1,6 +1,7 @@
 import shapely
 import shapely.ops
 import numpy as np
+import scipy.spatial.distance as distance
 from functools import partial
 from neuron_morphology.snap_polygons.geometries import (
     Geometries, make_scale, clear_overlaps, closest_from_stack,
@@ -164,25 +165,41 @@ def angles_around_polygon(poly):
     return np.hstack([angles[-1], angles[:-1]])
 
 
-def _assign_corners(perimeter):
+def _assign_corners(perimeter, max_angle_diff=np.pi / 3):
     perim_coords = np.array(perimeter.exterior.coords)
     vertex_angles = angles_around_polygon(perimeter)
     enclosing_rect = perimeter.minimum_rotated_rectangle
 
     rect_coords = np.array(enclosing_rect.exterior.coords)
 
+    all_angle_indices = np.arange(len(vertex_angles))
+    # only consider negative angles
+    neg_mask = vertex_angles < 0
+    print(vertex_angles[neg_mask])
+
+    # focus on sharper angles
     angle_diff = np.abs(vertex_angles + np.pi / 2)
-    sorted_angle_inds = np.argsort(angle_diff)
+    angle_diff_mask = angle_diff <= max_angle_diff
+    print(vertex_angles[angle_diff_mask])
+    print(angle_diff[angle_diff_mask])
+
+    # Sort by difference from 90 degrees
+    sorted_angle_inds = np.argsort(angle_diff[neg_mask & angle_diff_mask])
+    sorted_angle_inds = all_angle_indices[neg_mask & angle_diff_mask][sorted_angle_inds]
+
+    n_angles_to_test = len(sorted_angle_inds)
     keep_going = True
     corners_guess = np.sort(sorted_angle_inds[:4])
     next_guess_ind = 4
     best_score = np.inf
     full_dists_to_rect = distance.cdist(perim_coords, rect_coords)
-    while(keep_going):
-        total_dist = distances_for_guess(full_dists_to_rect, corners_guess)
+    print("perim shape", perim_coords.shape)
+    while(keep_going and next_guess_ind < n_angles_to_test):
+#         current_score = _distances_for_corner_guess(full_dists_to_rect, corners_guess)
         print("-------")
         print(corners_guess)
-        print(total_dist, np.sum(total_dist))
+        current_score = _tortuosity_score_for_corner_guess(corners_guess.tolist(), perim_coords)
+        print(current_score)
 
         # try next point - sub for each
         best_guess_set = None
@@ -192,22 +209,28 @@ def _assign_corners(perimeter):
             new_guess[i] = sorted_angle_inds[next_guess_ind]
             new_guess = np.sort(new_guess)
             print("new try", new_guess)
-            new_dist = distances_for_guess(full_dists_to_rect, new_guess)
-            print(new_dist, np.sum(new_dist))
-            if np.sum(new_dist) < best_guess_score:
-                best_guess_score = np.sum(new_dist)
+#             new_score = _distances_for_corner_guess(full_dists_to_rect, new_guess)
+            new_score = _tortuosity_score_for_corner_guess(new_guess.tolist(), perim_coords)
+            print(new_score)
+            if new_score < best_guess_score:
+                best_guess_score = new_score
                 best_guess_set = new_guess
 
-        if best_guess_score < np.sum(total_dist):
+        if best_guess_score < current_score:
             keep_going = True
             next_guess_ind += 1
             corners_guess = best_guess_set
+        elif next_guess_ind + 1 < n_angles_to_test:
+            keep_going = True
+            next_guess_ind += 1
         else:
             keep_going = False
 
+    print("chose", corners_guess)
     return corners_guess
 
-def _distances_for_corner_guess(dist_mat, corners_guess):
+
+def _assign_corners_by_rect(dist_mat, corners_guess):
     distances_to_rect = dist_mat[corners_guess, :]
 
     # Find corner closest to rectangle corner
@@ -218,10 +241,33 @@ def _distances_for_corner_guess(dist_mat, corners_guess):
     assignments = [(corners_guess[i % 4], r % 4)
                    for i, r in zip(range(closest_corner_ind, closest_corner_ind + 4),
                                    range(closest_rect, closest_rect + 4))]
-    total_dist = []
+    return assignments
+
+def _distances_for_corner_guess(dist_mat, corners_guess):
+    # Assign corners in order starting from closest
+    assignments = _assign_corners_by_rect(dist_mat, corners_guess)
+    dists = []
     for a in assignments:
-        total_dist.append(dist_mat[a[0], a[1]])
-    return total_dist
+        dists.append(dist_mat[a[0], a[1]])
+    return np.sum(dists)
+
+
+def _tortuosity_score_for_corner_guess(corners_guess, coords):
+    path_dists = []
+    euc_dists = []
+    print("guess in tort", corners_guess)
+    for ind_start, ind_end in zip(corners_guess, corners_guess[1:] + [corners_guess[0]]):
+        print("ind pair", ind_start, ind_end)
+        if ind_start < ind_end:
+            path = LineString(coords[ind_start:ind_end + 1, :])
+        else:
+            combo_coords = np.vstack([coords[ind_start:-1], coords[:ind_end + 1]])
+            path = LineString(combo_coords)
+        path_dists.append(path.length)
+        euc_dists.append(distance.euclidean(coords[ind_start, :], coords[ind_end, :]))
+
+    return np.sum(path_dists) / np.sum(euc_dists)
+
 
 def identify_pia_and_wm_sides(perimeter, corners, boundaries):
     """ Find pia and wm sides

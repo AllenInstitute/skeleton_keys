@@ -9,3 +9,4 @@ shapely
 geopandas
 ccf-streamlines
 rasterio
+task-queue

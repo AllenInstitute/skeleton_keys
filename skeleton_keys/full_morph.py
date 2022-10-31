@@ -103,7 +103,7 @@ def _angle_between_streamline_and_plane(streamline_coords, norm_vec):
 
 def angled_atlas_slice_for_morph(morph, atlas_volume,
         closest_surface_voxel_reference_file, surface_paths_file,
-        base_orientation='coronal',
+        base_orientation='auto',
         atlas_resolution=10., return_angle=True):
     """ Create an angled atlas slice lined up with a cell's streamline
 
@@ -117,19 +117,22 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
         Closest surface voxel reference HDF5 file path for angle calculation
     surface_paths_file : str
         Surface paths (streamlines) HDF5 file path for slice angle calculation
-    base_orientation : str, default 'coronal'
-        Initial slice orientation - either 'coronal' or 'parasagittal'
+    base_orientation : str, default 'auto'
+        Initial slice orientation - either 'auto' (pick option with smaller tilt),
+        'coronal' or 'parasagittal'
     atlas_resolution : float, default 10
         Voxel size of atlas volume (microns)
     return_angle : bool, default True
-        Whether to return the slice angle as well as the slice
+        Whether to return the slice angle and orientation along with the slice
 
     Returns
     -------
     atlas_slice : 2D array
         Angled atlas slice with CCF region IDs as values
     angle_rad : float
-        Angle of slice from coronal plane (radians)
+        Angle of slice from original plane (radians)
+    slice_orientation : str
+        Orientation of slice (for auto selection; otherwise matches base_orientation)
     """
 
     morph_soma = morph.get_soma()
@@ -139,16 +142,29 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
     morph_streamline = find_closest_streamline(
         soma_coords, closest_surface_voxel_reference_file, surface_paths_file)
 
-    if base_orientation == 'coronal':
+    if base_orientation == 'auto':
+        coronal_norm_vec = [1, 0, 0]
+        coronal_angle_deg = _angle_between_streamline_and_plane(morph_streamline, coronal_norm_vec)
+        para_norm_vec = [0, 0, -1]
+        para_angle_deg = _angle_between_streamline_and_plane(morph_streamline, para_norm_vec)
+        if np.abs(para_angle_deg) < np.abs(coronal_angle_deg):
+            norm_vec = para_norm_vec
+            base_orientation = 'parasagittal'
+            logging.info(f"Auto selecting parasagittal orientation ({para_angle_deg:.2f} angle vs {coronal_angle_deg:.2f} for coronal)")
+        else:
+            norm_vec = coronal_norm_vec
+            base_orientation = 'coronal'
+            logging.info(f"Auto selecting coronal orientation ({coronal_angle_deg:.2f} angle vs {para_angle_deg:.2f} for parasagittal)")
+    elif base_orientation == 'coronal':
         norm_vec = [1, 0, 0]
     elif base_orientation == 'parasagittal':
         norm_vec = [0, 0, -1]
     else:
-        raise ValueError("base_orientation must be 'coronal' or 'parasagittal'")
+        raise ValueError("base_orientation must be 'auto', 'coronal', or 'parasagittal'")
 
     # Get angle between coronal section and cell's streamline
     angle_deg = _angle_between_streamline_and_plane(morph_streamline, norm_vec)
-    logging.info(f"Tilting by {angle_deg} degrees from {base_orientation} plane")
+    logging.info(f"Tilting by {angle_deg:.2f} degrees from {base_orientation} plane")
 
     angle_rad = angle_deg * np.pi / 180.
 
@@ -193,7 +209,7 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
     atlas_slice = atlas_slice.reshape(reshape_size)
 
     if return_angle:
-        return atlas_slice, angle_rad
+        return atlas_slice, angle_rad, base_orientation
     else:
         return atlas_slice
 

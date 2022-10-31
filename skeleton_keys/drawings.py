@@ -56,7 +56,6 @@ def snap_hand_drawn_polygons(
     for key in list(result_geos.polygons.keys()):
         result_geos.polygons[key] = result_geos.polygons[key].intersection(bounds)
         # keep largest polygon if multiple geometries
-#         print(key, result_geos.polygons[key].geom_type)
         if result_geos.polygons[key].geom_type in ["MultiPolygon", "GeometryCollection"]:
             poly_area = 0
             for p in result_geos.polygons[key]:
@@ -121,7 +120,7 @@ def perimeter_of_layers(boundaries):
     return perimeter
 
 
-def simplify_and_find_corners(perimeter, tolerance=2, n_corners=4):
+def simplify_and_find_sides(perimeter, boundaries, tolerance=2):
     """ Simplify a perimeter boundary and identify corners
 
     Corners are the top `n_corners` vertices with angles closest to
@@ -133,8 +132,6 @@ def simplify_and_find_corners(perimeter, tolerance=2, n_corners=4):
         Shapely polygon of the perimeter
     tolerance : float, default 2
         Tolerance parameter for shapely's Polygon.simplify()
-    n_corners : int, default 4
-        Number of corners to identify
 
     Returns
     -------
@@ -147,139 +144,300 @@ def simplify_and_find_corners(perimeter, tolerance=2, n_corners=4):
     # Simplify perimeter
     simple_perim = orient(perimeter.simplify(tolerance=tolerance))
 
-    # Try to find corners
-    corner_inds = _assign_corners(simple_perim)
+    # Get polygons for layers
+    layer_polys = {}
+    for k, v in boundaries.items():
+        layer_polys[k] = Polygon(v)
 
-    return simple_perim, corner_inds
+    # Get an initial set of corners to optimize from
+    init_guess = _find_initial_corners(simple_perim, boundaries)
+
+    # Break apart into sides and get some initial metrics
+    sides, corner_sets = _split_poly_into_sides(simple_perim, init_guess)
+    init_touches = _count_layer_touches(sides, layer_polys)
+    init_tort = _tortuosity_of_sides(sides)
+
+    # Guess at the best candidate for a "vertical side" (i.e. not pia or wm)
+    best_vert_side_init = _initial_vertical_side_guess(init_touches, init_tort)
+
+    # Optimize the opposite side first
+    opp_vert_side_init = (best_vert_side_init + 2) % 4
+
+    # Find the worse problem corner
+    # pia/wm should minimize the number of layers they touch, so find the
+    # one that touches more
+
+    adj_a = (opp_vert_side_init - 1) % 4
+    adj_b = (opp_vert_side_init + 1) % 4
+    if init_touches[adj_a] < init_touches[adj_b]:
+        tmp = adj_a
+        adj_a = adj_b
+        adj_b = tmp
+
+    # Optimize opp / adj_a
+    new_corners, new_opp_vert_set = _optimize_corner_location(
+        init_guess, sides, corner_sets,
+        opp_vert_side_init, adj_a,
+        simple_perim, layer_polys)
+    sides, corner_sets = _reset_sides(simple_perim, new_corners,
+        opp_vert_side_init, new_opp_vert_set)
+
+    # Optimize opp / adj_b
+    new_corners, new_opp_vert_set = _optimize_corner_location(
+        new_corners, sides, corner_sets,
+        opp_vert_side_init, adj_b,
+        simple_perim, layer_polys)
+    sides, corner_sets = _reset_sides(simple_perim, new_corners,
+        opp_vert_side_init, new_opp_vert_set)
+
+    # Optimize initial best / adj_a
+    new_corners, new_best_vert_set = _optimize_corner_location(
+        new_corners, sides, corner_sets,
+        best_vert_side_init, adj_a,
+        simple_perim, layer_polys)
+    sides, corner_sets = _reset_sides(simple_perim, new_corners,
+        best_vert_side_init, new_best_vert_set)
+
+    # Optimize initial best / adj_b
+    new_corners, new_best_vert_set = _optimize_corner_location(
+        new_corners, sides, corner_sets,
+        best_vert_side_init, adj_b,
+        simple_perim, layer_polys)
+    sides, corner_sets = _reset_sides(simple_perim, new_corners,
+        best_vert_side_init, new_best_vert_set)
+
+    # adj_a and adj_b are the candidates for pia / wm
+    pia_side, wm_side = _identify_pia_and_wm_sides(
+        [sides[adj_a], sides[adj_b]], layer_polys)
+
+    return simple_perim, pia_side, wm_side
 
 
-def angles_around_polygon(poly):
-    """ Calculate vertex angles for polygon exterior"""
-    coords = np.array(poly.exterior.coords)
-
-    ab_vecs = coords[:-1, :] - coords[1:, :]
-    ca_vecs = np.vstack([coords[2:, :], coords[1, :]]) - coords[1:, :]
-
-    angles = np.arctan2(np.cross(ab_vecs, ca_vecs), np.einsum('ij,ij->i', ab_vecs, ca_vecs))
-
-    return np.hstack([angles[-1], angles[:-1]])
+def _initial_vertical_side_guess(touches, tortuosities):
+    max_touches = np.max(touches)
+    max_mask = np.array(touches) >= max_touches
+    if max_mask.sum() == 1:
+        return np.flatnonzero(max_mask)[0]
+    else:
+        straightest_ind = np.argmin(np.array(tortuosities)[max_mask])
+        return np.arange(len(touches))[max_mask][straightest_ind]
 
 
-def _assign_corners(perimeter, max_angle_diff=np.pi / 3):
+def _find_initial_corners(perimeter, boundaries):
+    # Get rough estimate for ends of the top & bottom layers
+    layer_order = [
+        "Isocortex layer 1",
+        "Isocortex layer 2/3",
+        "Isocortex layer 4",
+        "Isocortex layer 5",
+        "Isocortex layer 6a",
+        "Isocortex layer 6b",
+    ]
+
+    for l in layer_order:
+        if l in boundaries:
+            top_coords = boundaries[l]
+            break
+    for l in layer_order[::-1]:
+        if l in boundaries:
+            bottom_coords = boundaries[l]
+            break
+
+    top_dists = distance.squareform(distance.pdist(top_coords))
+    bottom_dists = distance.squareform(distance.pdist(bottom_coords))
+    top_max_inds = np.unravel_index(np.argmax(top_dists), top_dists.shape)
+    bottom_max_inds = np.unravel_index(np.argmax(bottom_dists), bottom_dists.shape)
+
+    edge_coords = np.vstack([
+        top_coords[top_max_inds, :],
+        bottom_coords[bottom_max_inds, :],
+    ])
     perim_coords = np.array(perimeter.exterior.coords)
-    vertex_angles = angles_around_polygon(perimeter)
-    enclosing_rect = perimeter.minimum_rotated_rectangle
 
-    rect_coords = np.array(enclosing_rect.exterior.coords)
-
-    all_angle_indices = np.arange(len(vertex_angles))
-    # only consider negative angles
-    neg_mask = vertex_angles < 0
-    print(vertex_angles[neg_mask])
-
-    # focus on sharper angles
-    angle_diff = np.abs(vertex_angles + np.pi / 2)
-    angle_diff_mask = angle_diff <= max_angle_diff
-    print(vertex_angles[angle_diff_mask])
-    print(angle_diff[angle_diff_mask])
-
-    # Sort by difference from 90 degrees
-    sorted_angle_inds = np.argsort(angle_diff[neg_mask & angle_diff_mask])
-    sorted_angle_inds = all_angle_indices[neg_mask & angle_diff_mask][sorted_angle_inds]
-
-    n_angles_to_test = len(sorted_angle_inds)
-    keep_going = True
-    corners_guess = np.sort(sorted_angle_inds[:4])
-    next_guess_ind = 4
-    best_score = np.inf
-    full_dists_to_rect = distance.cdist(perim_coords, rect_coords)
-    print("perim shape", perim_coords.shape)
-    while(keep_going and next_guess_ind < n_angles_to_test):
-#         current_score = _distances_for_corner_guess(full_dists_to_rect, corners_guess)
-        print("-------")
-        print(corners_guess)
-        current_score = _tortuosity_score_for_corner_guess(corners_guess.tolist(), perim_coords)
-        print(current_score)
-
-        # try next point - sub for each
-        best_guess_set = None
-        best_guess_score = np.inf
-        for i in range(4):
-            new_guess = corners_guess.copy()
-            new_guess[i] = sorted_angle_inds[next_guess_ind]
-            new_guess = np.sort(new_guess)
-            print("new try", new_guess)
-#             new_score = _distances_for_corner_guess(full_dists_to_rect, new_guess)
-            new_score = _tortuosity_score_for_corner_guess(new_guess.tolist(), perim_coords)
-            print(new_score)
-            if new_score < best_guess_score:
-                best_guess_score = new_score
-                best_guess_set = new_guess
-
-        if best_guess_score < current_score:
-            keep_going = True
-            next_guess_ind += 1
-            corners_guess = best_guess_set
-        elif next_guess_ind + 1 < n_angles_to_test:
-            keep_going = True
-            next_guess_ind += 1
-        else:
-            keep_going = False
-
-    print("chose", corners_guess)
-    return corners_guess
+    dist_to_edges = distance.cdist(perim_coords[:-1, :], edge_coords)
+    init_guess = np.argmin(dist_to_edges, axis=0)
+    if len(np.unique(init_guess)) < len(init_guess):
+        raise RuntimeError("initial corners were not all unique")
+    return init_guess
 
 
-def _assign_corners_by_rect(dist_mat, corners_guess):
-    distances_to_rect = dist_mat[corners_guess, :]
-
-    # Find corner closest to rectangle corner
-    closest_rect = np.argmin(np.min(distances_to_rect, axis=0))
-    closest_corner_ind = np.argmin(distances_to_rect[:, closest_rect])
-
-    # Assign corners in order starting from closest
-    assignments = [(corners_guess[i % 4], r % 4)
-                   for i, r in zip(range(closest_corner_ind, closest_corner_ind + 4),
-                                   range(closest_rect, closest_rect + 4))]
-    return assignments
-
-def _distances_for_corner_guess(dist_mat, corners_guess):
-    # Assign corners in order starting from closest
-    assignments = _assign_corners_by_rect(dist_mat, corners_guess)
-    dists = []
-    for a in assignments:
-        dists.append(dist_mat[a[0], a[1]])
-    return np.sum(dists)
-
-
-def _tortuosity_score_for_corner_guess(corners_guess, coords):
-    path_dists = []
-    euc_dists = []
-    print("guess in tort", corners_guess)
-    for ind_start, ind_end in zip(corners_guess, corners_guess[1:] + [corners_guess[0]]):
-        print("ind pair", ind_start, ind_end)
+def _split_poly_into_sides(poly, corners):
+    coords = np.array(poly.exterior.coords)
+    corners_list = list(np.sort(corners))
+    side_list = []
+    corner_sets = []
+    for ind_start, ind_end in zip(corners_list, corners_list[1:] + [corners_list[0]]):
+        corner_sets.append((ind_start, ind_end))
         if ind_start < ind_end:
             path = LineString(coords[ind_start:ind_end + 1, :])
         else:
             combo_coords = np.vstack([coords[ind_start:-1], coords[:ind_end + 1]])
             path = LineString(combo_coords)
-        path_dists.append(path.length)
-        euc_dists.append(distance.euclidean(coords[ind_start, :], coords[ind_end, :]))
-
-    return np.sum(path_dists) / np.sum(euc_dists)
+        side_list.append(path)
+    return side_list, corner_sets
 
 
-def identify_pia_and_wm_sides(perimeter, corners, boundaries):
+def _count_layer_touches(sides, layers, tolerance=1):
+    dist_list = []
+    count_list = []
+    for i, s in enumerate(sides):
+        dist_list.append({})
+        for k, l in layers.items():
+            dist_list[i][k] = l.distance(s)
+        count_list.append(np.sum([d < tolerance for d in dist_list[i].values()]))
+
+    return count_list
+
+
+def _tortuosity_of_sides(sides):
+    tort = []
+    for s in sides:
+        path_length = s.length
+        side_coords = np.array(s.coords)
+        euc_length = distance.euclidean(side_coords[0, :], side_coords[-1, :])
+        tort.append(path_length / euc_length)
+    return tort
+
+
+def _evaluate_moving_vertex(init_shared_vertex, init_corners, fixed_side_vertex, fixed_tb_vertex,
+    step, n_vert, adj_side_ind, adj_tb_ind, shrinking_end, init_touch_diff, init_len,
+    perimeter, layer_polys):
+
+    keep_going = True
+    moving_vertex = init_shared_vertex
+    best_vertex = init_shared_vertex
+    best_touch_diff = init_touch_diff
+    best_len = init_len
+
+    while keep_going:
+        moving_vertex += step
+        moving_vertex = moving_vertex % n_vert
+        if moving_vertex == shrinking_end:
+            # Reached the end
+            break
+
+        curr_corners = init_corners.copy()
+        curr_corners[curr_corners == init_shared_vertex] = moving_vertex
+        curr_sides, curr_corner_sets = _split_poly_into_sides(perimeter, curr_corners)
+        curr_touches = _count_layer_touches(curr_sides, layer_polys)
+
+        for i, c in enumerate(curr_corner_sets):
+            if moving_vertex in c:
+                if fixed_side_vertex in c:
+                    curr_side_candidate = i
+                elif fixed_tb_vertex in c:
+                    curr_tb_candidate = i
+        curr_touch_diff = curr_touches[curr_side_candidate] - curr_touches[curr_tb_candidate]
+        curr_len = curr_sides[curr_side_candidate].length
+
+        if curr_touch_diff > best_touch_diff:
+            best_vertex = moving_vertex
+            best_touch_diff = curr_touch_diff
+            best_len = curr_len
+        elif (curr_touch_diff == best_touch_diff) & (curr_len < best_len):
+            best_vertex = moving_vertex
+            best_touch_diff = curr_touch_diff
+            best_len = curr_len
+    return best_vertex, best_touch_diff, best_len
+
+
+def _optimize_corner_location(init_corners, sides, corner_sets, side_candidate, topbottom_candidate,
+                             perimeter, layer_polys):
+    side_corners = corner_sets[side_candidate]
+    topbottom_corners = corner_sets[topbottom_candidate]
+    shared_vertex = list(set(side_corners).intersection(topbottom_corners))[0]
+
+    n_vert = len(perimeter.exterior.coords) - 1
+    init_touches = _count_layer_touches(sides, layer_polys)
+    init_tort = _tortuosity_of_sides(sides)
+
+    # side should have more touches than top/bottom
+    # first try shrinking the side
+    if shared_vertex == side_corners[0]:
+        step = 1
+        adj_side_ind = 0
+        adj_tb_ind = 1
+    else:
+        step = -1
+        adj_side_ind = 1
+        adj_tb_ind = 0
+
+    best_shrink_vertex, best_shrink_touch_diff, best_shrink_len = _evaluate_moving_vertex(
+        shared_vertex, init_corners,
+        side_corners[(adj_side_ind + 1) % 2],
+        topbottom_corners[(adj_tb_ind + 1) % 2],
+        step, n_vert,
+        adj_side_ind, adj_tb_ind,
+        side_corners[(adj_side_ind + 1) % 2],
+        init_touches[side_candidate] - init_touches[topbottom_candidate],
+        sides[side_candidate].length,
+        perimeter, layer_polys,
+    )
+
+    # then try expanding the side
+    if shared_vertex == side_corners[0]:
+        step = -1
+        adj_side_ind = 0
+        adj_tb_ind = 1
+    else:
+        step = 1
+        adj_side_ind = 1
+        adj_tb_ind = 0
+
+    best_expand_vertex, best_expand_touch_diff, best_expand_len = _evaluate_moving_vertex(
+        shared_vertex, init_corners,
+        side_corners[(adj_side_ind + 1) % 2],
+        topbottom_corners[(adj_tb_ind + 1) % 2],
+        step, n_vert,
+        adj_side_ind, adj_tb_ind,
+        topbottom_corners[(adj_side_ind + 1) % 2],
+        init_touches[side_candidate] - init_touches[topbottom_candidate],
+        sides[side_candidate].length,
+        perimeter, layer_polys,
+    )
+
+    if best_expand_touch_diff > best_shrink_touch_diff:
+        optimized_vertex = best_expand_vertex
+    elif best_expand_touch_diff < best_shrink_touch_diff:
+        optimized_vertex = best_shrink_vertex
+    else:
+        if best_expand_len < best_shrink_len:
+            optimized_vertex = best_expand_vertex
+        else:
+            optimized_vertex = best_shrink_vertex
+
+    opt_corners = init_corners.copy()
+    opt_corners[opt_corners == shared_vertex] = optimized_vertex
+    new_side_corner_set = list(side_corners)
+    new_side_corner_set[adj_side_ind] = optimized_vertex
+
+    return opt_corners, tuple(new_side_corner_set)
+
+
+def _reset_sides(perim, new_corners, orig_ind, new_set):
+    new_sides, new_sets = _split_poly_into_sides(perim, new_corners)
+    inds = np.arange(4)
+    for i, c in enumerate(new_sets):
+        if c == new_set:
+            new_ind = i
+            break
+
+    shift = orig_ind - new_ind
+    new_inds = np.roll(inds, shift)
+    sides = [new_sides[i] for i in new_inds]
+    corner_sets = [new_sets[i] for i in new_inds]
+    return sides, corner_sets
+
+
+def _identify_pia_and_wm_sides(pia_wm_candidates, layer_polys):
     """ Find pia and wm sides
 
     Parameters
     ----------
-    simplified_perimeter : Polygon
-        Perimeter with fewer vertices
-    corners : (n_corners, ) array
-        Indexes of corner vertices
-    boundaries : dict
-        Dictionary with layer names as keys and boundary coordinates as values
+    pia_wm_candidates : list of LineStrings
+        Two options for pia or wm
+    layer_polys : dict
+        Dictionary with layer names as keys and boundary Polygons as values
 
     Returns
     -------
@@ -297,54 +455,22 @@ def identify_pia_and_wm_sides(perimeter, corners, boundaries):
         "Isocortex layer 6a",
         "Isocortex layer 6b",
     ]
-    layer_polys = [Polygon(b) for b in boundaries.values()]
-
-    # Use corners to define sides
-    n_sides = len(corners)
-    if n_sides % 2 != 0:
-        raise ValueError("Number of corners is not even")
-    half_n_sides = n_sides // 2
-    side_pairs = [(i, i + half_n_sides) for i in range(half_n_sides)]
-
-    sides = []
-    coords = np.array(perimeter.exterior.coords)
-    for i in range(len(corners)):
-        ind_start = corners[i]
-        ind_end = corners[(i + 1) % n_sides]
-        if ind_start < ind_end:
-            sides.append(LineString(coords[ind_start:ind_end + 1, :]))
-        else:
-            combo_coords = np.vstack([coords[ind_start:-1], coords[:ind_end + 1]])
-            sides.append(LineString(combo_coords))
-
-    # Find sides that represent top/bottom
-    bigger_dist_to_pair = {}
-    for pair in side_pairs:
-        bigger_dist_to_pair[pair] = []
-        for p in layer_polys:
-            bigger_dist_to_pair[pair].append(max(p.distance(sides[pair[0]]), p.distance(sides[pair[1]])))
-
-    max_avg_dist = -np.inf
-    top_bottom_pair = None
-    for pair in side_pairs:
-        if np.mean(bigger_dist_to_pair[pair]) > max_avg_dist:
-            top_bottom_pair = pair
-            max_avg_dist = np.mean(bigger_dist_to_pair[pair])
 
     # Determine top (pia) side
     for l in layer_order:
-        if l in boundaries:
-            top_poly = Polygon(boundaries[l])
+        if l in layer_polys:
+            top_poly = layer_polys[l]
             break
 
-    if top_poly.distance(sides[top_bottom_pair[0]]) < top_poly.distance(sides[top_bottom_pair[1]]):
-        pia_side = sides[top_bottom_pair[0]]
-        wm_side = sides[top_bottom_pair[1]]
+    if top_poly.distance(pia_wm_candidates[0]) < top_poly.distance(pia_wm_candidates[1]):
+        pia_side = pia_wm_candidates[0]
+        wm_side = pia_wm_candidates[1]
     else:
-        pia_side = sides[top_bottom_pair[1]]
-        wm_side = sides[top_bottom_pair[0]]
+        pia_side = pia_wm_candidates[1]
+        wm_side = pia_wm_candidates[0]
 
     return pia_side, wm_side
+
 
 def simplify_layer_boundaries(boundaries, tolerance):
     """ Simplify layer boundary drawings

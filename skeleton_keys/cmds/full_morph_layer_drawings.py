@@ -23,9 +23,9 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
         description="List of structure acronyms to include around morphology",
     )
     base_orientation = ags.fields.String(
-        default='coronal',
-        description='start with either a coronal or parasagittal orientation',
-        validation=lambda x: x in ['coronal', 'parasagittal'],
+        default='auto',
+        description='initial orientation of slice before tilting. "auto" selects the option with the smaller tilt. otherwise, a coronal or parasagittal slice can be specified',
+        validation=lambda x: x in ['auto', 'coronal', 'parasagittal'],
     )
     closest_surface_voxel_file = ags.fields.InputFile(
         description="Closest surface voxel reference HDF5 file for slice angle calculation",
@@ -57,7 +57,7 @@ def main(args):
 
     base_orientation = args['base_orientation']
 
-    atlas_slice, angle_rad = full_morph.angled_atlas_slice_for_morph(
+    atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
         morph,
         atlas_volume,
         args["closest_surface_voxel_file"],
@@ -89,15 +89,10 @@ def main(args):
 
     boundaries = full_morph.find_layer_outlines(atlas_slice)
     perimeter = drawings.perimeter_of_layers(boundaries)
-    simple_perimeter, corners = drawings.simplify_and_find_corners(
+    simple_perimeter, pia_side, wm_side = drawings.simplify_and_find_sides(
         perimeter,
-        tolerance=args['perimeter_simplify_tolerance'],
-        n_corners=4,
-    )
-    pia_side, wm_side = drawings.identify_pia_and_wm_sides(
-        simple_perimeter,
-        corners,
         boundaries,
+        tolerance=args['perimeter_simplify_tolerance'],
     )
 
     # Prepare drawings for JSON file

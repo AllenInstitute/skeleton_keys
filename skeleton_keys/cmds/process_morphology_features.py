@@ -1,7 +1,9 @@
 import json
+from re import A
 import argschema as ags
 import numpy as np
 import pandas as pd
+import logging
 from multiprocessing import Pool
 from functools import partial
 from skeleton_keys.database_queries import (
@@ -381,12 +383,17 @@ def main(args):
     if analyze_axon_flag:
         axon_depth_df = select_and_convert_depth_columns(depth_profile_df, "2_")
         available_ids = axon_depth_df.index.intersection(specimen_ids)
+        if len(available_ids) != len(specimen_ids):
+            missing_apical_num = len(specimen_ids) - len(available_ids)
+            logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have axons')
+        if len(available_ids) == 0:
+            raise Exception(f'None of the neurons passed have axon identified nodes (label 2, in columns beginning with 2_) in the depth profiles file at {aligned_depth_profile_file}')
         transformed = analyze_depth_profiles(
             axon_depth_df.loc[available_ids, :],
             args["axon_depth_profile_loadings_file"],
             args["save_axon_depth_profile_loadings_file"],
         )
-        for i, sp_id in enumerate(specimen_ids):
+        for i, sp_id in enumerate(available_ids):
             for j in range(transformed.shape[1]):
                 depth_result.append(
                     {
@@ -399,14 +406,19 @@ def main(args):
                 )
 
     if analyze_apical_flag:
-        apical_depth_df = select_and_convert_depth_columns(depth_profile_df, "4_")
+        apical_depth_df = select_and_convert_depth_columns(depth_profile_df, "4_")    
         available_ids = apical_depth_df.index.intersection(specimen_ids)
+        if len(available_ids) != len(specimen_ids):
+            missing_apical_num = len(specimen_ids) - len(available_ids)
+            logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons do no have apicals')
+        if len(available_ids) == 0:
+            raise Exception(f'None of the neurons passed have apical identified nodes (label 4, in columns beginning with 4_) in the depth profiles file at {aligned_depth_profile_file}')
         transformed = analyze_depth_profiles(
             apical_depth_df.loc[available_ids, :],
             args["apical_dendrite_depth_profile_loadings_file"],
             args["save_apical_dendrite_depth_profile_loadings_file"],
         )
-        for i, sp_id in enumerate(specimen_ids):
+        for i, sp_id in enumerate(available_ids):
             for j in range(transformed.shape[1]):
                 depth_result.append(
                     {
@@ -426,6 +438,11 @@ def main(args):
         # other analyses
         if analyze_basal_dendrite_depth_flag:
             available_ids = basal_depth_df.index.intersection(specimen_ids)
+            if len(available_ids) != len(specimen_ids):
+                missing_apical_num = len(specimen_ids) - len(available_ids)
+                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have basal-identified nodes')
+            if len(available_ids) == 0:
+                raise Exception(f'None of the neurons passed have basal identified nodes (label 3, in columns beginning with 3_) in the depth profiles file at {aligned_depth_profile_file}')
             transformed = analyze_depth_profiles(
                 basal_depth_df.loc[available_ids, :],
                 args["basal_dendrite_depth_profile_loadings_file"],

@@ -28,6 +28,7 @@ from skeleton_keys.slice_angle import slice_angle_tilt
 from skeleton_keys.drawings import (
     snap_hand_drawn_polygons,
     convert_and_translate_snapped_to_microns,
+    remove_duplicate_coordinates_from_drawings,
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.io import load_default_layer_template
@@ -111,6 +112,10 @@ def main(args):
 
         # Query for layers
         layer_polygons = layer_polygons_from_database(imser_id)
+
+    # Remove any duplicate coordinates from surfaces
+    pia_surface = remove_duplicate_coordinates_from_drawings(pia_surface)
+    wm_surface = remove_duplicate_coordinates_from_drawings(wm_surface)
 
     # Check that layer polygons exist
     if len(layer_polygons) < 1:

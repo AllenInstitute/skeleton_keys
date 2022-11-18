@@ -25,7 +25,10 @@ from skeleton_keys.database_queries import (
 )
 from skeleton_keys.slice_angle import slice_angle_tilt
 from skeleton_keys.upright import upright_corrected_morph
-from skeleton_keys.drawings import convert_and_translate_snapped_to_microns
+from skeleton_keys.drawings import (
+    convert_and_translate_snapped_to_microns,
+    remove_duplicate_coordinates_from_drawings,
+)
 from skeleton_keys.layer_alignment import (
     setup_interpolator_without_nan,
     path_dist_from_node,
@@ -122,6 +125,10 @@ def main(args):
         pia_surface, wm_surface, soma_drawing = pia_wm_soma_from_database(
             specimen_id, imser_id
         )
+
+    # Remove any duplicate coordinates from surfaces
+    pia_surface = remove_duplicate_coordinates_from_drawings(pia_surface)
+    wm_surface = remove_duplicate_coordinates_from_drawings(wm_surface)
 
     # Load the morphology
     morph = morphology_from_swc(swc_path)

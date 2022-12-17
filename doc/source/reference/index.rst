@@ -12,6 +12,5 @@ API Reference
     io
     layer_alignment
     plotting
-    shrinkage
     slice_angle
     upright

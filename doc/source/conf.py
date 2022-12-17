@@ -37,10 +37,18 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = []
 
-autodoc_mock_imports = ["fenicsx", 'gmsh', 'neuron_morphology', 'numpy',
-    'pandas', 'allensdk', 'sklearn', 'scipy', 'shapely', 'geopandas', 'taskqueue',
-    'tqdm', 'seaborn', 'cloudfiles']
-
+autodoc_mock_imports = [
+    'neuron_morphology',
+    'pandas',
+    'allensdk',
+    'sklearn',
+    'scipy',
+    'ccf_streamlines',
+    'shapely',
+    'geopandas',
+    'tqdm',
+    'seaborn',
+]
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

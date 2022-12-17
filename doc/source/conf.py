@@ -39,7 +39,7 @@ exclude_patterns = []
 
 autodoc_mock_imports = ["fenicsx", 'gmsh', 'neuron_morphology', 'numpy',
     'pandas', 'allensdk', 'sklearn', 'scipy', 'shapely', 'geopandas', 'taskqueue',
-    'tqdm', 'seaborn']
+    'tqdm', 'seaborn', 'cloudfiles']
 
 
 # -- Options for HTML output -------------------------------------------------

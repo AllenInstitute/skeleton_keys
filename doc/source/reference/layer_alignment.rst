@@ -17,7 +17,7 @@ layer drawings in the same space.
     layer_alignment.layer_aligned_y_values_for_morph
     layer_alignment.cortex_thickness_aligned_y_values
     layer_alignment.cortex_thickness_aligned_y_values_for_morph
-    layer_alignment.fractions_within_layers
+    layer_alignment.fractions_within_layer
     layer_alignment.step_all_nodes
     layer_alignment.layer_side_depths
     layer_alignment.layer_locations

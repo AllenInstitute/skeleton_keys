@@ -94,7 +94,7 @@ dimensions where slight differences may not be relevant.
 
 
 ``skelekeys-layer-aligned-coords``
--------------------------------
+----------------------------------
 
 Script to layer-aligned coordinates from a general CSV file.
 
@@ -104,8 +104,8 @@ Script to layer-aligned coordinates from a general CSV file.
     layer_aligned_coords.LayerAlignedCoordsSchema
 
 
-``skelekeys-layer-aligned-swc``
--------------------------------
+``skelekeys-profiles-from-coords``
+----------------------------------
 
 Script to calculate layer-aligned depth profile histograms from a CSV with
 layer-aligned coordinates.

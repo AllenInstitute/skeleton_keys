@@ -2,7 +2,7 @@ numpy
 scipy
 pandas
 scikit-learn
-git+https://github.com/AllenInstitute/neuron_morphology@science_staging
+neuron-morphology>=1.1.1
 argschema
 allensdk
 shapely

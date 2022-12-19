@@ -8,7 +8,7 @@ RUN apt-get update && \
 RUN mamba install -y -c conda-forge conda-lock conda-pack
 COPY conda-lock.yml .
 RUN conda-lock install --name skeleton_keys conda-lock.yml
-SHELL ["mamba", "run","-n","skeleton_keys","/bin/bash", "-c"]
+SHELL ["/bin/bash", "-c"]
 COPY requirements.txt .
 RUN mamba run -n skeleton_keys pip install -r requirements.txt
 COPY . /usr/local/src/skeleton_keys

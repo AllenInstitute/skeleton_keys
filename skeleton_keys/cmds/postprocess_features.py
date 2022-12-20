@@ -40,7 +40,7 @@ class PostprocessFeaturesParameters(ags.ArgSchema):
         description="Whether to drop the soma surface area features",
     )
     drop_nans = ags.fields.Boolean(
-        default=True,
+        default=False,
         description="Whether to drop cells that have nan for any values",
     )
 

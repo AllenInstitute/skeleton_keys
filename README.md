@@ -18,6 +18,16 @@ pip install skeleton keys
 
     pip install .
 
+Internal Allen Institute Use
+============================
+In order to download morphologies from the internal LIMS system, you must set certain environment variables to connect properly.  These include
+
+        LIMS_HOST
+        LIMS_DBNAME
+        LIMS_USER
+        LIMS_PASSWORD
+
+Contact the technology team if you need to get credential details to access LIMS.
 
 Scripts
 =======

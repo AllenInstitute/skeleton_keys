@@ -2,14 +2,15 @@
 
 This package supports the skeletal analysis of morphologies.
 
+We recommend installing this on Linux or Mac via conda. We aren't generally currently supporting Windows, though there are some scripts which may work and be useful on that platform. This is because we are utilized fenics-dolphix which is not available on Windows. 
+
 Installation instructions
 =========================
 
-clone source
-navigate to source directory
+clone the repo, setup a conda environment with the proper requirements and activate it
 
-setup a conda environment with the proper requirements and activate it
-
+    git clone git@github.com:AllenInstitute/skeleton_keys.git
+    cd skeleton_keys
     conda create -n ENV_NAME -f environment.yml
     conda activate ENV_NAME
 

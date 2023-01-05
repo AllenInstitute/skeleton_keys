@@ -4,14 +4,18 @@ This package supports the skeletal analysis of morphologies.
 
 Installation instructions
 =========================
-setup a conda environment with the proper requirements and activate it
-
-    conda create -n ENV_NAME -f mac_10.15_py3.8_environment.yml
-    conda activate ENV_NAME
 
 clone source
 navigate to source directory
-pip install .
+
+setup a conda environment with the proper requirements and activate it
+
+    conda create -n ENV_NAME -f environment.yml
+    conda activate ENV_NAME
+
+pip install skeleton keys
+
+    pip install .
 
 
 Scripts

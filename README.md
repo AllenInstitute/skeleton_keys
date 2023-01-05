@@ -2,34 +2,17 @@
 
 This package supports the skeletal analysis of morphologies.
 
-
-
 Installation instructions
 =========================
+setup a conda environment with the proper requirements and activate it
 
-
-install ccf_streamlines from source
-https://github.com/AllenInstitute/ccf_streamlines
-git@github.com:AllenInstitute/ccf_streamlines.git
-
-install neuron_morphology from source
-(note instructions that you need to conda install some dependancies first)
-https://github.com/AllenInstitute/neuron_morphology.git
-git@github.com:AllenInstitute/neuron_morphology.git
-
+    conda create -n ENV_NAME -f mac_10.15_py3.8_environment.yml
+    conda activate ENV_NAME
 
 clone source
 navigate to source directory
 pip install .
 
-Conda
------
-some environment files are provided to help ease install
-
-For Mac 10.15 (Catalina) this python 3.8 environment was tested in December 2021.
-To create an environment with it.
-
-    conda create -n ENV_NAME -f mac_10.15_py3.8_environment.yml
 
 Scripts
 =======

@@ -10,6 +10,7 @@ Welcome to skeleton_keys's documentation!
     :maxdepth: 2
     :caption: Contents:
 
+    install
     guide
     reference/index
 

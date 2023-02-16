@@ -2,33 +2,32 @@
 
 This package supports the skeletal analysis of morphologies.
 
+We recommend installing this on Linux or Mac via conda. We aren't generally currently supporting Windows, though there are some scripts which may work and be useful on that platform. This is because we are utilized fenics-dolphix which is not available on Windows. 
 
 Installation instructions
 =========================
 
+clone the repo, setup a conda environment with the proper requirements and activate it
 
-install ccf_streamlines from source
-https://github.com/AllenInstitute/ccf_streamlines
-git@github.com:AllenInstitute/ccf_streamlines.git
+    git clone git@github.com:AllenInstitute/skeleton_keys.git
+    cd skeleton_keys
+    conda create -n ENV_NAME -f environment.yml
+    conda activate ENV_NAME
 
-install neuron_morphology from source
-(note instructions that you need to conda install some dependancies first)
-https://github.com/AllenInstitute/neuron_morphology.git
-git@github.com:AllenInstitute/neuron_morphology.git
+pip install skeleton keys
 
+    pip install .
 
-clone source
-navigate to source directory
-pip install .
+Internal Allen Institute Use
+============================
+In order to download morphologies from the internal LIMS system, you must set certain environment variables to connect properly.  These include
 
-Conda
------
-some environment files are provided to help ease install
+        LIMS_HOST
+        LIMS_DBNAME
+        LIMS_USER
+        LIMS_PASSWORD
 
-For Mac 10.15 (Catalina) this python 3.8 environment was tested in December 2021.
-To create an environment with it.
-
-    conda create -n ENV_NAME -f mac_10.15_py3.8_environment.yml
+Contact the technology team if you need to get credential details to access LIMS.
 
 Scripts
 =======
@@ -50,7 +49,9 @@ skelekeys-postprocess-features
 ------------------------------
 script to to take a long form set of features and post-process them to remove zeros and perform zscoring and/or uniform scaling of features.
 
-
+Statement of Support
+====================
+This code is an important part of the internal Allen Institute code base and we are actively using and maintaining it. Issues are encouraged, but because this tool is so central to our mission pull requests might not be accepted if they conflict with our existing plans.
 
 
 

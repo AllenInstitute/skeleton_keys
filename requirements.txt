@@ -1,0 +1,12 @@
+numpy
+scipy
+pandas
+scikit-learn
+neuron-morphology>=1.1.1
+argschema
+allensdk
+shapely
+geopandas
+ccf-streamlines
+rasterio
+task-queue

@@ -25,20 +25,22 @@ from skeleton_keys.database_queries import (
 )
 from skeleton_keys.slice_angle import slice_angle_tilt
 from skeleton_keys.upright import upright_corrected_morph
-from skeleton_keys.drawings import convert_and_translate_snapped_to_microns
+from skeleton_keys.drawings import (
+    convert_and_translate_snapped_to_microns,
+    remove_duplicate_coordinates_from_drawings,
+)
 from skeleton_keys.layer_alignment import (
     setup_interpolator_without_nan,
     path_dist_from_node,
 )
-from skeleton_keys import cloudfields
-from skeleton_keys.io import read_json_file
+
 
 class UprightCorrectedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")
-    swc_path = cloudfields.InputFile(
+    swc_path = ags.fields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )
-    output_file = cloudfields.OutputFile(default="output.swc")
+    output_file = ags.fields.OutputFile(default="output.swc")
     correct_for_shrinkage = ags.fields.Boolean(
         default=True,
         description="Whether to correct for shrinkage",
@@ -47,17 +49,17 @@ class UprightCorrectedSwcSchema(ags.ArgSchema):
         default=True,
         description="Whether to correct for slice angle",
     )
-    surface_and_layers_file = cloudfields.InputFile(
+    surface_and_layers_file = ags.fields.InputFile(
         description="JSON file with surface and layer polygon paths",
         default=None,
         allow_none=True,
     )
-    closest_surface_voxel_file = cloudfields.InputFile(
+    closest_surface_voxel_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="Closest surface voxel reference HDF5 file for slice angle calculation",
     )
-    surface_paths_file = cloudfields.InputFile(
+    surface_paths_file = ags.fields.InputFile(
         default=None,
         allow_none=True,
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",
@@ -65,7 +67,7 @@ class UprightCorrectedSwcSchema(ags.ArgSchema):
 
 
 def soma_distance_from_pia(pia_surface, depth_field, gradient_field, translation):
-    """Calculate the distance (in microns) from the soma to the pia"""
+    """ Calculate the distance (in microns) from the soma to the pia """
     # Create pia surface geometry
     surfs = Geometries()
     surfs.register_surface("pia", pia_surface["path"])
@@ -73,22 +75,19 @@ def soma_distance_from_pia(pia_surface, depth_field, gradient_field, translation
 
     # convert to micron scale and translate to soma-centered depth field
     surfs = convert_and_translate_snapped_to_microns(
-        surfs, pia_surface["resolution"], translation
-    )
-    surfs_dict = {
-        s["name"]: shapely.geometry.LineString(s["path"]) for s in surfs["surfaces"]
-    }
+        surfs, pia_surface['resolution'], translation)
+    surfs_dict = {s["name"]: shapely.geometry.LineString(s["path"]) for s in surfs["surfaces"]}
 
     # Set up interpolators for navigating fields
     depth_interp = setup_interpolator_without_nan(
-        depth_field, None, method="linear", bounds_error=False, fill_value=None
-    )
+        depth_field, None, method="linear",
+        bounds_error=False, fill_value=None)
     dx_interp = setup_interpolator_without_nan(
-        gradient_field, "dx", method="linear", bounds_error=False, fill_value=None
-    )
+        gradient_field, "dx", method="linear",
+        bounds_error=False, fill_value=None)
     dy_interp = setup_interpolator_without_nan(
-        gradient_field, "dy", method="linear", bounds_error=False, fill_value=None
-    )
+        gradient_field, "dy", method="linear",
+        bounds_error=False, fill_value=None)
 
     # Field is soma centered, so find the distance to pia from (0, 0)
     soma_dist_to_pia = path_dist_from_node(
@@ -113,7 +112,8 @@ def main(args):
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
     if surface_and_layers_file is not None:
-        surfaces_and_paths = read_json_file(surface_and_layers_file)
+        with open(surface_and_layers_file, "r") as f:
+            surfaces_and_paths = json.load(f)
         pia_surface = surfaces_and_paths["pia_path"]
         wm_surface = surfaces_and_paths["wm_path"]
         soma_drawing = surfaces_and_paths["soma_path"]
@@ -125,6 +125,10 @@ def main(args):
         pia_surface, wm_surface, soma_drawing = pia_wm_soma_from_database(
             specimen_id, imser_id
         )
+
+    # Remove any duplicate coordinates from surfaces
+    pia_surface = remove_duplicate_coordinates_from_drawings(pia_surface)
+    wm_surface = remove_duplicate_coordinates_from_drawings(wm_surface)
 
     # Load the morphology
     morph = morphology_from_swc(swc_path)
@@ -169,7 +173,7 @@ def main(args):
         morph = upright_corrected_morph(
             morph, upright_angle, slice_angle, flip_status, shrink_factor
         )
-    else:
+    else :
         # just upright the morphology
         rotation_upright_matrix = rotation_from_angle(upright_angle, axis=2)
         rotation_upright_affine = affine_from_transform_translation(
@@ -180,8 +184,7 @@ def main(args):
 
     # Set to correct depth from pia
     soma_dist_to_pia = soma_distance_from_pia(
-        pia_surface, depth_field, gradient_field, translation
-    )
+        pia_surface, depth_field, gradient_field, translation)
 
     translation_for_soma = np.array([0, -soma_dist_to_pia, 0])
     translation_affine = affine_from_translation(translation_for_soma)

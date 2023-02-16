@@ -5,7 +5,10 @@ from neuron_morphology.feature_extractor.feature_specialization import (
     NEURITE_SPECIALIZATIONS,
     AxonSpec,
     BasalDendriteSpec,
+    ApicalDendriteSpec
 )
+from neuron_morphology.features.statistics.moments_along_max_distance_projection import \
+    moments_along_max_distance_projection
 from neuron_morphology.features.statistics.coordinates import COORD_TYPE_SPECIALIZATIONS
 from neuron_morphology.features.dimension import dimension
 from neuron_morphology.features.intrinsic import (
@@ -17,10 +20,13 @@ from neuron_morphology.features.size import (
     max_euclidean_distance
 )
 from neuron_morphology.features.path import (
-    max_path_distance, mean_contraction
+    max_path_distance, mean_contraction, early_branch_path
 )
 from neuron_morphology.features.soma import (
-    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance
+    soma_percentile, calculate_number_of_stems, calculate_stem_exit_and_distance, calculate_soma_surface
+)
+from neuron_morphology.features.branching.bifurcations import (
+    num_outer_bifurcations
 )
 
 
@@ -28,8 +34,8 @@ def default_features():
     """ Get set of default morphology features for feature extractor"""
     return [
         nested_specialize(
-                dimension,
-                [COORD_TYPE_SPECIALIZATIONS, NEURITE_SPECIALIZATIONS]),
+            dimension,
+            [COORD_TYPE_SPECIALIZATIONS, NEURITE_SPECIALIZATIONS]),
         specialize(num_branches, NEURITE_SPECIALIZATIONS),
         specialize(max_branch_order, NEURITE_SPECIALIZATIONS),
         specialize(total_length, NEURITE_SPECIALIZATIONS),
@@ -40,5 +46,9 @@ def default_features():
         specialize(mean_contraction, NEURITE_SPECIALIZATIONS),
         specialize(soma_percentile, NEURITE_SPECIALIZATIONS),
         specialize(calculate_number_of_stems, [BasalDendriteSpec]),
-        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec])
+        specialize(calculate_stem_exit_and_distance, [AxonSpec, BasalDendriteSpec]),
+        specialize(moments_along_max_distance_projection, [ApicalDendriteSpec]),
+        specialize(early_branch_path, [ApicalDendriteSpec]),
+        specialize(num_outer_bifurcations, [ApicalDendriteSpec]),
+        calculate_soma_surface,
     ]

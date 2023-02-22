@@ -526,11 +526,23 @@ def merge_atlas_layers(atlas_image, tree=None):
         "Isocortex layer 6b": 667481450,
     }
 
+    ent_layer_structures = {
+        'Isocortex layer 1': [1121, 526, 259],
+        'Isocortex layer 2/3': [20, 999, 715, 764, 543, 468, 508, 324, 52, 664, 371],
+        'Isocortex layer 4': [92, 312, 712, 419],
+        'Isocortex layer 5': [139, 727],
+        'Isocortex layer 6a': [28, 743],
+        'Isocortex layer 6b': [60]
+    }
+
     uniq_structs, inv = np.unique(atlas_image, return_inverse=True)
 
     structure_layer_mapping = {}
-    for struct_set_id in layer_structure_sets.values():
+    for iso_cortex_lyr, struct_set_id in layer_structure_sets.items():
         structures_of_set = [d['id'] for d in tree.get_structures_by_set_id([struct_set_id])]
+        for ent_lyr_struct_id in ent_layer_structures[iso_cortex_lyr]:
+            structures_of_set.append(ent_lyr_struct_id)
+
         for struct_id in uniq_structs:
             if struct_id in structures_of_set:
                 structure_layer_mapping[struct_id] = struct_set_id

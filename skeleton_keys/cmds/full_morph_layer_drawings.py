@@ -15,12 +15,14 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
         description="path to CCF-aligned full morphology SWC file"
     )
     atlas_volume_file = ags.fields.InputFile(
-        description = "NRRD file of CCF atlas volume",
+        description="NRRD file of CCF atlas volume",
     )
     structure_list = ags.fields.List(
         ags.fields.String,
         cli_as_single_argument=True,
-        description="List of structure acronyms to include around morphology",
+        description="List of structure acronyms to include around morphology. When not provided, will find structures automatically",
+        required=False,
+        default=[]
     )
     base_orientation = ags.fields.String(
         default=None,
@@ -73,8 +75,16 @@ def main(args):
     rspc = ReferenceSpaceCache(resolution, reference_space_key, manifest='manifest.json')
     tree = rspc.get_structure_tree(structure_graph_id=1)
 
-    base_orientation = args['base_orientation']
+    # Check if the cells soma is out of cortex
+    isocortex_struct_id = 315
+    out_of_cortex_bool, nearest_cortex_coord = full_morph.check_coord_in_structure(soma_coords,
+                                                                                   isocortex_struct_id,
+                                                                                   atlas_volume,
+                                                                                   args['closest_surface_voxel_file'],
+                                                                                   args['surface_paths_file'],
+                                                                                   tree)
 
+    base_orientation = args['base_orientation']
     if base_orientation is None:
         atlas_slice, q = full_morph.min_curvature_atlas_slice_for_morph(
             morph,
@@ -83,11 +93,12 @@ def main(args):
             args["surface_paths_file"],
             args["pia_curvature_surface_file"],
             args["wm_curvature_surface_file"],
+            nearest_cortex_coord
         )
 
-        rot_morph = full_morph.rotate_morphology_for_drawings_by_rotation(
-            morph, q)
-        rot_morph = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice)
+        rot_morph, rot_nearest_cortex_coord = full_morph.rotate_morphology_for_drawings_by_rotation(
+            morph, q, nearest_cortex_coord)
+        rot_morph, rot_nearest_cortex_coord = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice, rot_nearest_cortex_coord)
     else:
         atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
             morph,
@@ -96,13 +107,20 @@ def main(args):
             args["surface_paths_file"],
             base_orientation=base_orientation,
             return_angle=True,
+            closest_cortex_node=nearest_cortex_coord,
+
         )
-        rot_morph = full_morph.rotate_morphology_for_drawings_by_angle(
-            morph, angle_rad, base_orientation)
+
+        rot_morph, rot_nearest_cortex_coord = full_morph.rotate_morphology_for_drawings_by_angle(
+            morph, angle_rad, base_orientation, nearest_cortex_coord)
+
+    structure_list = args["structure_list"]
+    if not structure_list:
+        structure_list = full_morph.find_structures_morphology_occupies(args["swc_path"], atlas_volume, tree)
 
     atlas_slice = full_morph.select_structures_of_interest(
         atlas_slice,
-        args["structure_list"],
+        structure_list,
         tree
     )
     atlas_slice = full_morph.merge_atlas_layers(atlas_slice, tree)
@@ -124,7 +142,6 @@ def main(args):
         boundaries,
         tolerance=args['perimeter_simplify_tolerance'],
     )
-
     # Prepare drawings for JSON file
     name_translation = {
         "Isocortex layer 1": "Layer1",
@@ -134,9 +151,13 @@ def main(args):
         "Isocortex layer 6a": "Layer6a",
         "Isocortex layer 6b": "Layer6b",
     }
+    # If the soma was out of cortex we will pass in the nearest cortex node to the drawings output file
+    if out_of_cortex_bool:
+        soma_drawing_data = [float(rot_nearest_cortex_coord[0]), float(rot_nearest_cortex_coord[1])]
+    else:
+        rot_soma = rot_morph.get_soma()
+        soma_drawing_data = [float(rot_soma['x']), float(rot_soma['y'])]
 
-    rot_soma = rot_morph.get_soma()
-    rot_soma_coords = [float(rot_soma['x']), float(rot_soma['y'])]
     drawing_data = {}
     drawing_data["pia_path"] = {
         "name": "Pia",
@@ -151,7 +172,7 @@ def main(args):
     drawing_data["soma_path"] = {
         "name": "Soma",
         "resolution": 1.0,
-        "path": [rot_soma_coords],
+        "path": [soma_drawing_data],
     }
 
     simplifed_boundaries = drawings.simplify_layer_boundaries(
@@ -165,6 +186,8 @@ def main(args):
         })
 
     # Write output files
+    drawing_data['base_orientation'] = base_orientation
+    drawing_data['structure_list'] = structure_list
     with open(args['output_drawings_file'], 'w') as f:
         json.dump(drawing_data, f)
 

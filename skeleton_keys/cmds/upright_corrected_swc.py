@@ -33,7 +33,7 @@ from skeleton_keys.layer_alignment import (
 
 
 class UprightCorrectedSwcSchema(ags.ArgSchema):
-    specimen_id = ags.fields.Integer(description="Specimen ID")
+    specimen_id = ags.fields.String(description="Specimen ID")
     swc_path = ags.fields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )

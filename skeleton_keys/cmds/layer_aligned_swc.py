@@ -35,7 +35,7 @@ from skeleton_keys.layer_alignment import layer_aligned_y_values_for_morph, cort
 
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
-    specimen_id = ags.fields.Integer(description="Specimen ID")
+    specimen_id = ags.fields.String(description="Specimen ID")
     swc_path = ags.fields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )
@@ -168,8 +168,8 @@ def main(args):
 
     # align morph to depth field
     # depth field is centered at origin
-    soma_morph = morph.get_soma()
-    translation_to_origin = np.array([-soma_morph["x"], -soma_morph["y"], 0])
+    mean_soma = np.array(soma_drawing["path"]).mean(axis=0)
+    translation_to_origin = np.array([-mean_soma[0], -mean_soma[1], 0])
     translation_affine = affine_from_translation(translation_to_origin)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)

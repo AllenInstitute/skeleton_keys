@@ -154,8 +154,10 @@ def simplify_and_find_sides(perimeter, boundaries, tolerance=2):
 
     # Break apart into sides and get some initial metrics
     sides, corner_sets = _split_poly_into_sides(simple_perim, init_guess)
+
     init_touches = _count_layer_touches(sides, layer_polys)
     init_tort = _tortuosity_of_sides(sides)
+
 
     # Guess at the best candidate for a "vertical side" (i.e. not pia or wm)
     best_vert_side_init = _initial_vertical_side_guess(init_touches, init_tort)
@@ -345,6 +347,7 @@ def _optimize_corner_location(init_corners, sides, corner_sets, side_candidate, 
                              perimeter, layer_polys):
     side_corners = corner_sets[side_candidate]
     topbottom_corners = corner_sets[topbottom_candidate]
+
     shared_vertex = list(set(side_corners).intersection(topbottom_corners))[0]
 
     n_vert = len(perimeter.exterior.coords) - 1
@@ -390,7 +393,7 @@ def _optimize_corner_location(init_corners, sides, corner_sets, side_candidate, 
         topbottom_corners[(adj_tb_ind + 1) % 2],
         step, n_vert,
         adj_side_ind, adj_tb_ind,
-        topbottom_corners[(adj_side_ind + 1) % 2],
+        topbottom_corners[(adj_tb_ind + 1) % 2],
         init_touches[side_candidate] - init_touches[topbottom_candidate],
         sides[side_candidate].length,
         perimeter, layer_polys,
@@ -416,6 +419,7 @@ def _optimize_corner_location(init_corners, sides, corner_sets, side_candidate, 
 
 def _reset_sides(perim, new_corners, orig_ind, new_set):
     new_sides, new_sets = _split_poly_into_sides(perim, new_corners)
+
     inds = np.arange(4)
     for i, c in enumerate(new_sets):
         if c == new_set:

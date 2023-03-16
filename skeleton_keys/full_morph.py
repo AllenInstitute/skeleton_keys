@@ -569,7 +569,7 @@ def remove_other_hemisphere(atlas_image, soma_coords, ccf_dimension=(1320, 800, 
     return removed_atlas_image
 
 
-def find_layer_outlines(atlas_image):
+def find_layer_outlines(atlas_image, soma_coords, resolution=10, min_contour_pts=10):
     """ Identify boundaries of each layer from a 2D atlas image
 
     Atlas image must contain the structure set IDs of the cortical layers
@@ -578,6 +578,12 @@ def find_layer_outlines(atlas_image):
     ----------
     atlas_image : 2D array
         Atlas image
+    soma_coords : (3, ) array
+        Soma coordinates aligned to the drawings
+    resolution : float, default 10
+        Voxel size (microns)
+    min_contour_pts : int, default 10
+        Minimum number of points to consider contour as an option
 
     Returns
     -------
@@ -600,15 +606,20 @@ def find_layer_outlines(atlas_image):
         contours = find_contours(region_raster, level=0.5)
 
         if len(contours) == 0:
-            # No contours found
-            boundaries[name] = np.array([])
+            # No contours found - don't add
+            pass
         elif len(contours) == 1:
             boundaries[name] = contours[0]
         else:
-            # Find the biggest contour
-            max_len = 0
+            # Find the contour closest to the soma
+            min_dist = np.inf
             for c in contours:
-                if len(c) > max_len:
+                if c.shape[0] < min_contour_pts:
+                    # Skip very small contours
+                    continue
+                centroid = c.mean(axis=0) * resolution
+                dist = euclidean(soma_coords[:2], centroid)
+                if dist < min_dist:
                     boundaries[name] = c
-                    max_len = len(c)
+                    min_dist = dist
     return boundaries

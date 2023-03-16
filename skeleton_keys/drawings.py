@@ -8,7 +8,7 @@ from neuron_morphology.snap_polygons.geometries import (
     get_snapped_polys, find_vertical_surfaces, select_largest_subpolygon
 )
 from neuron_morphology.transforms.geometry import get_vertices_from_two_lines
-from shapely.geometry.polygon import Polygon, LineString, orient
+from shapely.geometry.polygon import Point, Polygon, LineString, orient
 
 
 def snap_hand_drawn_polygons(
@@ -115,7 +115,7 @@ def perimeter_of_layers(boundaries):
             Shapely polygon of the perimeter
     """
 
-    polys = [Polygon(b) for b in boundaries.values()]
+    polys = [Polygon(b) for b in boundaries.values() if np.size(b) > 0]
     perimeter = shapely.ops.unary_union(polys)
     return perimeter
 
@@ -208,9 +208,27 @@ def simplify_and_find_sides(perimeter, boundaries, tolerance=2):
     sides, corner_sets = _reset_sides(simple_perim, new_corners,
         best_vert_side_init, new_best_vert_set)
 
+    # Refine the top / bottom edges (adj_a & adj_b)
+    adj_a_corners = corner_sets[adj_a]
+    adj_b_corners = corner_sets[adj_b]
+
+    adj_a_corners = _expand_to_touch_additional_layer(
+        adj_a_corners, simple_perim, layer_polys)
+    adj_b_corners = _expand_to_touch_additional_layer(
+        adj_b_corners, simple_perim, layer_polys)
+
+    adj_a_corners = _trim_edges(
+        adj_a_corners, simple_perim, layer_polys)
+    adj_b_corners = _trim_edges(
+        adj_b_corners, simple_perim, layer_polys)
+
+    coords = np.array(simple_perim.exterior.coords)
+    adj_a_path = _path_from_corners_and_coords(adj_a_corners, coords)
+    adj_b_path = _path_from_corners_and_coords(adj_b_corners, coords)
+
     # adj_a and adj_b are the candidates for pia / wm
     pia_side, wm_side = _identify_pia_and_wm_sides(
-        [sides[adj_a], sides[adj_b]], layer_polys)
+        [adj_a_path, adj_b_path], layer_polys)
 
     return simple_perim, pia_side, wm_side
 
@@ -270,11 +288,7 @@ def _split_poly_into_sides(poly, corners):
     corner_sets = []
     for ind_start, ind_end in zip(corners_list, corners_list[1:] + [corners_list[0]]):
         corner_sets.append((ind_start, ind_end))
-        if ind_start < ind_end:
-            path = LineString(coords[ind_start:ind_end + 1, :])
-        else:
-            combo_coords = np.vstack([coords[ind_start:-1], coords[:ind_end + 1]])
-            path = LineString(combo_coords)
+        path = _path_from_corners_and_coords((ind_start, ind_end), coords)
         side_list.append(path)
     return side_list, corner_sets
 
@@ -305,13 +319,12 @@ def _evaluate_moving_vertex(init_shared_vertex, init_corners, fixed_side_vertex,
     step, n_vert, adj_side_ind, adj_tb_ind, shrinking_end, init_touch_diff, init_len,
     perimeter, layer_polys):
 
-    keep_going = True
     moving_vertex = init_shared_vertex
     best_vertex = init_shared_vertex
     best_touch_diff = init_touch_diff
     best_len = init_len
 
-    while keep_going:
+    while True:
         moving_vertex += step
         moving_vertex = moving_vertex % n_vert
         if moving_vertex == shrinking_end:
@@ -474,6 +487,191 @@ def _identify_pia_and_wm_sides(pia_wm_candidates, layer_polys):
         wm_side = pia_wm_candidates[0]
 
     return pia_side, wm_side
+
+
+def _path_from_corners_and_coords(corners, coords):
+    start, end = corners
+    if start < end:
+        path = LineString(coords[start:end + 1, :])
+    else:
+        combo_coords = np.vstack([coords[start:-1], coords[:end + 1]])
+        path = LineString(combo_coords)
+    return path
+
+
+def _expand_to_touch_additional_layer(corners, simple_perim, layer_polys, tolerance=1):
+    coords = np.array(simple_perim.exterior.coords)
+    n_vert = coords.shape[0] - 1
+
+    path = _path_from_corners_and_coords(corners, coords)
+
+    # count current touches
+    touches = 0
+    for l in layer_polys.values():
+        if l.distance(path) < tolerance:
+            touches += 1
+
+    start, end = corners
+
+    # try expanding from the start
+    current_ind = start
+    found_good_expansion = False
+    while True:
+        next_ind = (current_ind - 1) % n_vert
+        new_path = _path_from_corners_and_coords((next_ind, end), coords)
+        new_touches = 0
+        for l in layer_polys.values():
+            if l.distance(new_path) < tolerance:
+                new_touches += 1
+
+        if new_touches == touches + 1:
+            found_good_expansion = True
+            break
+        elif new_touches > touches + 1:
+            # went too far
+            break
+        elif next_ind == start:
+            break
+
+        current_ind = next_ind
+
+    if found_good_expansion:
+        new_start = next_ind
+    else:
+        new_start = start
+
+    # try expanding from the end
+    current_ind = end
+    found_good_expansion = False
+    while True:
+        next_ind = (current_ind + 1) % n_vert
+        new_path = _path_from_corners_and_coords((next_ind, end), coords)
+        new_touches = 0
+        for l in layer_polys.values():
+            if l.distance(new_path) < tolerance:
+                new_touches += 1
+
+        if new_touches == touches + 1:
+            found_good_expansion = True
+            break
+        elif new_touches > touches + 1:
+            # went too far
+            break
+        elif next_ind == end:
+            break
+
+        current_ind = next_ind
+
+    if found_good_expansion:
+        new_end = next_ind
+    else:
+        new_end = end
+    return new_start, new_end
+
+
+def _trim_edges(corners, simple_perim, layer_polys, threshold=0.50, touch_tolerance=1):
+    layer_order = [
+        "Isocortex layer 1",
+        "Isocortex layer 2/3",
+        "Isocortex layer 4",
+        "Isocortex layer 5",
+        "Isocortex layer 6a",
+        "Isocortex layer 6b",
+    ]
+
+    # Determine top & next to top
+    found_top = False
+    for l in layer_order:
+        if l in layer_polys and not found_top:
+            top_poly = layer_polys[l]
+            found_top = True
+        elif l in layer_polys:
+            next_to_top_poly = layer_polys[l]
+            break
+
+    # Determine bottom & next to bottom
+    found_bottom = False
+    for l in layer_order[::-1]:
+        if l in layer_polys and not found_bottom:
+            bottom_poly = layer_polys[l]
+            found_bottom = True
+        elif l in layer_polys:
+            next_to_bottom_poly = layer_polys[l]
+            break
+
+    coords = np.array(simple_perim.exterior.coords)
+    n_vert = coords.shape[0] - 1
+
+    start, end = corners
+    path = _path_from_corners_and_coords(corners, coords)
+
+    # are we working on a top edge or bottom edge?
+    if path.distance(top_poly) < path.distance(bottom_poly):
+        # Working with a top edge
+        nearest_poly = top_poly
+        next_nearest_poly = next_to_top_poly
+    else:
+        # Working with a bottom edge
+        nearest_poly = bottom_poly
+        next_nearest_poly = next_to_bottom_poly
+
+    # try shrinking from start
+    current_end = start
+    while True:
+        next_to_end = (current_end + 1) % n_vert
+        if next_to_end == end:
+            # Can't have single-point edge
+            break
+
+        current_end_pt = Point(coords[current_end, :])
+        next_to_end_pt = Point(coords[next_to_end, :])
+
+        # First check that we haven't gone too far past the top/bottom layer - if so, drop the point
+        if current_end_pt.distance(nearest_poly) > touch_tolerance:
+            current_end = next_to_end
+            continue
+
+        # Get distance between end and next point
+        dist_between_end_and_next = current_end_pt.distance(next_to_end_pt)
+
+        diff_dist = next_to_end_pt.distance(next_nearest_poly) - current_end_pt.distance(next_nearest_poly)
+
+        if diff_dist / dist_between_end_and_next < threshold:
+            break
+        else:
+            current_end = next_to_end
+
+    new_start = current_end
+
+    # try shrinking from end
+    current_end = end
+    while True:
+        next_to_end = (current_end - 1) % n_vert
+        if next_to_end == new_start:
+            # Can't have single-point edge
+            break
+
+        current_end_pt = Point(coords[current_end, :])
+        next_to_end_pt = Point(coords[next_to_end, :])
+
+        # First check that we haven't gone too far past the top/bottom layer - if so, drop the point
+        if current_end_pt.distance(nearest_poly) > touch_tolerance:
+            current_end = next_to_end
+            continue
+
+        # Get distance between end and next point
+        dist_between_end_and_next = current_end_pt.distance(next_to_end_pt)
+
+        diff_dist = next_to_end_pt.distance(next_nearest_poly) - current_end_pt.distance(next_nearest_poly)
+
+        if diff_dist / dist_between_end_and_next < threshold:
+            break
+        else:
+            current_end = next_to_end
+
+    new_end = current_end
+
+    return  new_start, new_end
 
 
 def simplify_layer_boundaries(boundaries, tolerance):

@@ -341,9 +341,29 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
     morph_soma = morph.get_soma()
     soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
 
+    # check if on right hemisphere
+    on_right = False
+    if soma_coords[2] > (atlas_resolution * atlas_volume.shape[2] / 2):
+        on_right = True
+
+        # Blank out opposite hemisphere
+        atlas_volume = atlas_volume.copy()
+        atlas_volume[:, :, :atlas_volume.shape[2] // 2] = 0
+    else:
+        # Blank out opposite hemisphere
+        atlas_volume = atlas_volume.copy()
+        atlas_volume[:, :, atlas_volume.shape[2] // 2:] = 0
+
     # Find streamline for cell (coordinates in um)
-    morph_streamline = find_closest_streamline(
-        soma_coords, closest_surface_voxel_reference_file, surface_paths_file)
+
+    if not on_right:
+        morph_streamline = find_closest_streamline(
+            soma_coords, closest_surface_voxel_reference_file, surface_paths_file)
+    else:
+        flipped_soma_coords = soma_coords.copy()
+        flipped_soma_coords[2] = atlas_resolution * atlas_volume.shape[2] - soma_coords[2]
+        morph_streamline = find_closest_streamline(
+            flipped_soma_coords, closest_surface_voxel_reference_file, surface_paths_file)
 
     # Convert to mm
     top_streamline_coords_mm = morph_streamline[0, :] / 1000.
@@ -391,6 +411,10 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
         norm_vec = pia_t1_arr[pia_cell_idx]
     else:
         norm_vec = wm_t1_arr[wm_cell_idx]
+
+    if on_right:
+        # Flip the z-direction
+        norm_vec[2] = -norm_vec[2]
 
     # Set up the reference mesh (parasagittal orientation) centered on the soma
     soma_coords_for_atlas = soma_coords / atlas_resolution

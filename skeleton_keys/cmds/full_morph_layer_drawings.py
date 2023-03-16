@@ -23,15 +23,24 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
         description="List of structure acronyms to include around morphology",
     )
     base_orientation = ags.fields.String(
-        default='auto',
-        description='initial orientation of slice before tilting. "auto" selects the option with the smaller tilt. otherwise, a coronal or parasagittal slice can be specified',
-        validation=lambda x: x in ['auto', 'coronal', 'parasagittal'],
+        default=None,
+        allow_none=True,
+        description='initial orientation of slice before tilting (if used). If option is None, the slice will be determined by finding the direction of minimum curvature near the cell. "auto" selects the option with the smaller tilt. otherwise, a coronal or parasagittal slice can be specified',
+        validation=lambda x: x in [None, 'auto', 'coronal', 'parasagittal'],
     )
     closest_surface_voxel_file = ags.fields.InputFile(
         description="Closest surface voxel reference HDF5 file for slice angle calculation",
     )
     surface_paths_file = ags.fields.InputFile(
         description="Surface paths (streamlines) HDF5 file for slice angle calculation",
+    )
+    pia_curvature_surface_file = ags.fields.InputFile(
+        description="VTP file path for pia surface curvature values",
+        allow_none=True,
+    )
+    wm_curvature_surface_file = ags.fields.InputFile(
+        description="VTP file path for white matter surface curvature values",
+        allow_none=True,
     )
     perimeter_simplify_tolerance = ags.fields.Float(
         description="tolerance parameter for perimeter simplification",
@@ -40,6 +49,10 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
     layer_simplify_tolerance = ags.fields.Float(
         description="tolerance parameter for layer border simplification",
         default=1,
+    )
+    min_contour_pts = ags.fields.Integer(
+        description="minimum number of points to consider layer boundary contour",
+        default=10,
     )
     output_drawings_file = ags.fields.OutputFile(
         description="Output JSON file with layer drawings",
@@ -55,24 +68,37 @@ def main(args):
 
     atlas_volume, _ = nrrd.read(args["atlas_volume_file"])
 
-    base_orientation = args['base_orientation']
-
-    atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
-        morph,
-        atlas_volume,
-        args["closest_surface_voxel_file"],
-        args["surface_paths_file"],
-        base_orientation=base_orientation,
-        return_angle=True,
-    )
-
-    rot_morph = full_morph.rotate_morphology_for_drawings(
-        morph, angle_rad, base_orientation)
-
     reference_space_key = 'annotation/ccf_2017'
     resolution = 10
     rspc = ReferenceSpaceCache(resolution, reference_space_key, manifest='manifest.json')
     tree = rspc.get_structure_tree(structure_graph_id=1)
+
+    base_orientation = args['base_orientation']
+
+    if base_orientation is None:
+        atlas_slice, q = full_morph.min_curvature_atlas_slice_for_morph(
+            morph,
+            atlas_volume,
+            args["closest_surface_voxel_file"],
+            args["surface_paths_file"],
+            args["pia_curvature_surface_file"],
+            args["wm_curvature_surface_file"],
+        )
+
+        rot_morph = full_morph.rotate_morphology_for_drawings_by_rotation(
+            morph, q)
+        rot_morph = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice)
+    else:
+        atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
+            morph,
+            atlas_volume,
+            args["closest_surface_voxel_file"],
+            args["surface_paths_file"],
+            base_orientation=base_orientation,
+            return_angle=True,
+        )
+        rot_morph = full_morph.rotate_morphology_for_drawings_by_angle(
+            morph, angle_rad, base_orientation)
 
     atlas_slice = full_morph.select_structures_of_interest(
         atlas_slice,
@@ -81,13 +107,17 @@ def main(args):
     )
     atlas_slice = full_morph.merge_atlas_layers(atlas_slice, tree)
 
-    if base_orientation == 'coronal':
+    if base_orientation is not None and base_orientation == 'coronal':
         atlas_slice = full_morph.remove_other_hemisphere(
             atlas_slice,
             soma_coords
         )
 
-    boundaries = full_morph.find_layer_outlines(atlas_slice)
+    drawing_soma = rot_morph.get_soma()
+    drawing_soma_coords = np.array([drawing_soma['x'], drawing_soma['y'], drawing_soma['z']])
+
+    boundaries = full_morph.find_layer_outlines(
+        atlas_slice, drawing_soma_coords, min_contour_pts=args['min_contour_pts'])
     perimeter = drawings.perimeter_of_layers(boundaries)
     simple_perimeter, pia_side, wm_side = drawings.simplify_and_find_sides(
         perimeter,

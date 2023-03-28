@@ -11,8 +11,8 @@ clone the repo, setup a conda environment with the proper requirements and activ
 
     git clone git@github.com:AllenInstitute/skeleton_keys.git
     cd skeleton_keys
-    conda create -n ENV_NAME -f environment.yml
-    conda activate ENV_NAME
+    conda env create -f environment.yml
+    conda activate skeleton_keys_env
 
 pip install skeleton keys
 

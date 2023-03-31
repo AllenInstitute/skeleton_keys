@@ -45,7 +45,7 @@ skelekeys-morph-features
 ----------------------------
 script to take a list of upright cells, a layer histogram file, and a soma depth file, and extract morphological features from those cells in a long format.
 
-This script can be run without upright cells, and/or a layer histogram file, and/or a soma depth file. Just pass in the directory of swc files that you would like to quantify and leave the histogram and soma depth file arguments as the default (None).
+This script can be run without upright cells, and/or a layer histogram file, and/or a soma depth file. Just pass in the swc files that you would like to quantify and leave the histogram and soma depth file arguments as the default (None).
 
 skelekeys-postprocess-features
 ------------------------------

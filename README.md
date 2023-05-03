@@ -35,19 +35,21 @@ After installation the following console scripts will be available to run from t
 
 skelekeys-layer-aligned-swc
 ----------------------------
-script to take an swc file, a polygon definition, a common layer cortical boundary file and produce a swc file that has been remapped to common layer boundaries.
+script to take a swc file, a polygon definition (representing cortical layers and pia/wm surfaces), a common layer cortical boundary file and produce a swc file that has been remapped to common layer boundaries.
 
 skelekeys-profiles-from-swcs
 --------------------------------
-script to take an directory of swc files, a common layer boundary file and return layer histogram file and a soma position file for the cells
+script to take a directory of layer-aligned swc files, a common layer boundary file and return layer histogram file and a soma depth file for the cells
 
 skelekeys-morph-features
 ----------------------------
-script to take a list of layer aligned cells, a layer histogram file, a soma position file, and a common cortical boundary file and extract morphological features from those cells in a long format.
+script to take a list of upright cells, a layer histogram file, and a soma depth file, and extract morphological features from those cells in a long format.
+
+This script can be run without upright cells, and/or a layer histogram file, and/or a soma depth file. Just pass in the swc files that you would like to quantify and leave the histogram and soma depth file arguments as the default (None).
 
 skelekeys-postprocess-features
 ------------------------------
-script to to take a long form set of features and post-process them to remove zeros and perform zscoring and/or uniform scaling of features.
+script to take a long form set of features and post-process them to remove zeros and perform zscoring and/or uniform scaling of features.
 
 Statement of Support
 ====================

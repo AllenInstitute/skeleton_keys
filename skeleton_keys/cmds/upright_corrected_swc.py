@@ -3,6 +3,10 @@ import shapely
 import numpy as np
 import pandas as pd
 import argschema as ags
+from skeleton_keys.layer_alignment import (
+    setup_interpolator_without_nan,
+    path_dist_from_node,
+)
 from neuron_morphology.swc_io import morphology_from_swc, morphology_to_swc
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
     run_streamlines,
@@ -28,10 +32,6 @@ from skeleton_keys.upright import upright_corrected_morph
 from skeleton_keys.drawings import (
     convert_and_translate_snapped_to_microns,
     remove_duplicate_coordinates_from_drawings,
-)
-from skeleton_keys.layer_alignment import (
-    setup_interpolator_without_nan,
-    path_dist_from_node,
 )
 
 

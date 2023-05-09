@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import pandas as pd
 import argschema as ags
+from skeleton_keys.layer_alignment import layer_aligned_y_values_for_morph, cortex_thickness_aligned_y_values_for_morph
 from neuron_morphology.swc_io import morphology_from_swc, morphology_to_swc
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
     run_streamlines,
@@ -32,8 +33,6 @@ from skeleton_keys.drawings import (
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.io import load_default_layer_template
-from skeleton_keys.layer_alignment import layer_aligned_y_values_for_morph, cortex_thickness_aligned_y_values_for_morph
-
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
     specimen_id = ags.fields.Integer(description="Specimen ID")

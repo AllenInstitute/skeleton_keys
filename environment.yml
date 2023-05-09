@@ -1,4 +1,4 @@
-name: skeleton_keys
+name: skeleton_keys_env
 channels:
   - conda-forge
 dependencies:

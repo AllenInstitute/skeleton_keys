@@ -1,15 +1,11 @@
 import json
-from re import A
 import argschema as ags
 import numpy as np
 import pandas as pd
 import logging
 from multiprocessing import Pool
-from functools import partial
 from skeleton_keys.database_queries import (
     swc_paths_from_database,
-    shrinkage_factor_from_database,
-    pia_wm_soma_from_database,
 )
 from skeleton_keys.depth_profile import (
     calculate_pca_transforms_and_loadings,
@@ -18,15 +14,10 @@ from skeleton_keys.depth_profile import (
     overlap_between_compartments,
 )
 from skeleton_keys.feature_definition import default_features
-from skeleton_keys.upright import upright_corrected_morph
 from neuron_morphology.swc_io import morphology_from_swc
 from neuron_morphology.feature_extractor.data import Data
 from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor
 from neuron_morphology.feature_extractor.utilities import unnest
-from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
-    run_streamlines,
-)
-from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 import os
 
 
@@ -44,12 +35,15 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         allow_none=True,
         description="optional - folder to find swc files, assuming specimen_id.swc is filename",
     )
-
     aligned_depth_profile_file = ags.fields.InputFile(
-        description="CSV file with layer-aligned depth profile information",
+        description="CSV file with layer-aligned depth profile. If None, depth PCs and EMD features aren't quantified",
+        allow_none=True,
+        default=None,
     )
     aligned_soma_file = ags.fields.InputFile(
-        description="CSV file with layer-aligned soma depth information",
+        description="CSV file with layer-aligned soma depth information. If None, soma depth are not calculated.",
+        allow_none=True,
+        default=None,
     )
     layer_list = ags.fields.List(
         ags.fields.String,
@@ -356,14 +350,12 @@ def main(args):
 
     # Load soma depths
     aligned_soma_file = args["aligned_soma_file"]
-    soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
-    soma_loc_res = soma_locations(
-        soma_loc_df.loc[soma_loc_df.index.intersection(specimen_ids), :]
-    )
-
-    # Load depth profiles
-    aligned_depth_profile_file = args["aligned_depth_profile_file"]
-    depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
+    soma_loc_res = []
+    if aligned_soma_file is not None:
+        soma_loc_df = pd.read_csv(aligned_soma_file, index_col=0)
+        soma_loc_res = soma_locations(
+            soma_loc_df.loc[soma_loc_df.index.intersection(specimen_ids), :]
+        )
 
     # Compartment analysis flags
     analyze_axon_flag = args["analyze_axon"]
@@ -371,82 +363,33 @@ def main(args):
     analyze_apical_flag = args["analyze_apical_dendrite"]
     analyze_basal_dendrite_depth_flag = args["analyze_basal_dendrite_depth"]
 
-    # Analyze depth profiles
-    # Assumes that depth profile file has columns in the format:
-    # "{compartment label}_{feature number}"
-
+    # Load depth profiles
+    aligned_depth_profile_file = args["aligned_depth_profile_file"]
     depth_result = []
-    axon_depth_df = None
-    apical_depth_df = None
-    basal_depth_df = None
+    profile_comparison_result = []
+    if aligned_depth_profile_file is not None:
 
-    if analyze_axon_flag:
-        axon_depth_df = select_and_convert_depth_columns(depth_profile_df, "2_")
-        available_ids = axon_depth_df.index.intersection(specimen_ids)
-        if len(available_ids) != len(specimen_ids):
-            missing_apical_num = len(specimen_ids) - len(available_ids)
-            logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have axons')
-        if len(available_ids) == 0:
-            raise Exception(f'None of the neurons passed have axon identified nodes (label 2, in columns beginning with 2_) in the depth profiles file at {aligned_depth_profile_file}')
-        transformed = analyze_depth_profiles(
-            axon_depth_df.loc[available_ids, :],
-            args["axon_depth_profile_loadings_file"],
-            args["save_axon_depth_profile_loadings_file"],
-        )
-        for i, sp_id in enumerate(available_ids):
-            for j in range(transformed.shape[1]):
-                depth_result.append(
-                    {
-                        "specimen_id": sp_id,
-                        "feature": f"depth_pc_{j}",
-                        "compartment_type": "axon",
-                        "dimension": "none",
-                        "value": transformed[i, j],
-                    }
-                )
+        # Analyze depth profiles
+        # Assumes that depth profile file has columns in the format:
+        # "{compartment label}_{feature number}"
+        depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
 
-    if analyze_apical_flag:
-        apical_depth_df = select_and_convert_depth_columns(depth_profile_df, "4_")    
-        available_ids = apical_depth_df.index.intersection(specimen_ids)
-        if len(available_ids) != len(specimen_ids):
-            missing_apical_num = len(specimen_ids) - len(available_ids)
-            logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons do no have apicals')
-        if len(available_ids) == 0:
-            raise Exception(f'None of the neurons passed have apical identified nodes (label 4, in columns beginning with 4_) in the depth profiles file at {aligned_depth_profile_file}')
-        transformed = analyze_depth_profiles(
-            apical_depth_df.loc[available_ids, :],
-            args["apical_dendrite_depth_profile_loadings_file"],
-            args["save_apical_dendrite_depth_profile_loadings_file"],
-        )
-        for i, sp_id in enumerate(available_ids):
-            for j in range(transformed.shape[1]):
-                depth_result.append(
-                    {
-                        "specimen_id": sp_id,
-                        "feature": f"depth_pc_{j}",
-                        "compartment_type": "apical_dendrite",
-                        "dimension": "none",
-                        "value": transformed[i, j],
-                    }
-                )
+        axon_depth_df = None
+        apical_depth_df = None
+        basal_depth_df = None
 
-    if analyze_basal_flag:
-        basal_depth_df = select_and_convert_depth_columns(depth_profile_df, "3_")
-
-        # Extra option, since PCA on basal dendrite profiles is not
-        # typically that interesting, but we need the basal_depth_df for
-        # other analyses
-        if analyze_basal_dendrite_depth_flag:
-            available_ids = basal_depth_df.index.intersection(specimen_ids)
+        if analyze_axon_flag:
+            axon_depth_df = select_and_convert_depth_columns(depth_profile_df, "2_")
+            available_ids = axon_depth_df.index.intersection(specimen_ids)
             if len(available_ids) != len(specimen_ids):
                 missing_apical_num = len(specimen_ids) - len(available_ids)
-                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have basal-identified nodes')
+                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have axons')
             if len(available_ids) == 0:
-                raise Exception(f'None of the neurons passed have basal identified nodes (label 3, in columns beginning with 3_) in the depth profiles file at {aligned_depth_profile_file}')
+                raise Exception(f'None of the neurons passed have axon identified nodes (label 2, in columns beginning with 2_) in the depth profiles file at {aligned_depth_profile_file}')
             transformed = analyze_depth_profiles(
-                basal_depth_df.loc[available_ids, :],
-                args["basal_dendrite_depth_profile_loadings_file"],
-                args["save_basal_dendrite_depth_profile_loadings_file"],
+                axon_depth_df.loc[available_ids, :],
+                args["axon_depth_profile_loadings_file"],
+                args["save_axon_depth_profile_loadings_file"],
             )
             for i, sp_id in enumerate(available_ids):
                 for j in range(transformed.shape[1]):
@@ -454,67 +397,121 @@ def main(args):
                         {
                             "specimen_id": sp_id,
                             "feature": f"depth_pc_{j}",
-                            "compartment_type": "basal_dendrite",
+                            "compartment_type": "axon",
                             "dimension": "none",
                             "value": transformed[i, j],
                         }
                     )
 
-    # determine pairs of compartments to compare
-    profile_comparison_pairs = []
-    if analyze_axon_flag and analyze_apical_flag:
-        profile_comparison_pairs.append(
-            ("axon", "apical_dendrite", axon_depth_df, apical_depth_df)
-        )
-    if analyze_axon_flag and analyze_basal_flag:
-        profile_comparison_pairs.append(
-            ("axon", "basal_dendrite", axon_depth_df, basal_depth_df)
-        )
-    if analyze_apical_flag and analyze_basal_flag:
-        profile_comparison_pairs.append(
-            ("apical_dendrite", "basal_dendrite", apical_depth_df, basal_depth_df)
-        )
-
-    # Analyze earthmover distances and overlap between depth profiles
-    profile_comparison_result = []
-    for name_a, name_b, df_a, df_b in profile_comparison_pairs:
-        emd_df = earthmover_distance_between_compartments(df_a, df_b)
-        for r in emd_df.itertuples():
-            profile_comparison_result.append(
-                {
-                    "specimen_id": r.Index,
-                    "feature": f"emd_with_{name_b}",
-                    "compartment_type": name_a,
-                    "dimension": "none",
-                    "value": r.emd,
-                }
+        if analyze_apical_flag:
+            apical_depth_df = select_and_convert_depth_columns(depth_profile_df, "4_")
+            available_ids = apical_depth_df.index.intersection(specimen_ids)
+            if len(available_ids) != len(specimen_ids):
+                missing_apical_num = len(specimen_ids) - len(available_ids)
+                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons do no have apicals')
+            if len(available_ids) == 0:
+                raise Exception(f'None of the neurons passed have apical identified nodes (label 4, in columns beginning with 4_) in the depth profiles file at {aligned_depth_profile_file}')
+            transformed = analyze_depth_profiles(
+                apical_depth_df.loc[available_ids, :],
+                args["apical_dendrite_depth_profile_loadings_file"],
+                args["save_apical_dendrite_depth_profile_loadings_file"],
             )
-        overlap_a_b_df = overlap_between_compartments(df_a, df_b)
-        for r in overlap_a_b_df.itertuples():
-            r_dict = r._asdict()
-            for feature in ("frac_above", "frac_intersect", "frac_below"):
+            for i, sp_id in enumerate(available_ids):
+                for j in range(transformed.shape[1]):
+                    depth_result.append(
+                        {
+                            "specimen_id": sp_id,
+                            "feature": f"depth_pc_{j}",
+                            "compartment_type": "apical_dendrite",
+                            "dimension": "none",
+                            "value": transformed[i, j],
+                        }
+                    )
+
+        if analyze_basal_flag:
+            basal_depth_df = select_and_convert_depth_columns(depth_profile_df, "3_")
+
+            # Extra option, since PCA on basal dendrite profiles is not
+            # typically that interesting, but we need the basal_depth_df for
+            # other analyses
+            if analyze_basal_dendrite_depth_flag:
+                available_ids = basal_depth_df.index.intersection(specimen_ids)
+                if len(available_ids) != len(specimen_ids):
+                    missing_apical_num = len(specimen_ids) - len(available_ids)
+                    logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have basal-identified nodes')
+                if len(available_ids) == 0:
+                    raise Exception(f'None of the neurons passed have basal identified nodes (label 3, in columns beginning with 3_) in the depth profiles file at {aligned_depth_profile_file}')
+                transformed = analyze_depth_profiles(
+                    basal_depth_df.loc[available_ids, :],
+                    args["basal_dendrite_depth_profile_loadings_file"],
+                    args["save_basal_dendrite_depth_profile_loadings_file"],
+                )
+                for i, sp_id in enumerate(available_ids):
+                    for j in range(transformed.shape[1]):
+                        depth_result.append(
+                            {
+                                "specimen_id": sp_id,
+                                "feature": f"depth_pc_{j}",
+                                "compartment_type": "basal_dendrite",
+                                "dimension": "none",
+                                "value": transformed[i, j],
+                            }
+                        )
+
+        # determine pairs of compartments to compare
+        profile_comparison_pairs = []
+        if analyze_axon_flag and analyze_apical_flag:
+            profile_comparison_pairs.append(
+                ("axon", "apical_dendrite", axon_depth_df, apical_depth_df)
+            )
+        if analyze_axon_flag and analyze_basal_flag:
+            profile_comparison_pairs.append(
+                ("axon", "basal_dendrite", axon_depth_df, basal_depth_df)
+            )
+        if analyze_apical_flag and analyze_basal_flag:
+            profile_comparison_pairs.append(
+                ("apical_dendrite", "basal_dendrite", apical_depth_df, basal_depth_df)
+            )
+
+        # Analyze earthmover distances and overlap between depth profiles
+        for name_a, name_b, df_a, df_b in profile_comparison_pairs:
+            emd_df = earthmover_distance_between_compartments(df_a, df_b)
+            for r in emd_df.itertuples():
                 profile_comparison_result.append(
                     {
                         "specimen_id": r.Index,
-                        "feature": f"{feature}_{name_b}",
+                        "feature": f"emd_with_{name_b}",
                         "compartment_type": name_a,
                         "dimension": "none",
-                        "value": r_dict[feature],
+                        "value": r.emd,
                     }
                 )
-        overlap_b_a_df = overlap_between_compartments(df_b, df_a)
-        for r in overlap_b_a_df.itertuples():
-            for feature in ("frac_above", "frac_intersect", "frac_below"):
+            overlap_a_b_df = overlap_between_compartments(df_a, df_b)
+            for r in overlap_a_b_df.itertuples():
                 r_dict = r._asdict()
-                profile_comparison_result.append(
-                    {
-                        "specimen_id": r.Index,
-                        "feature": f"{feature}_{name_a}",
-                        "compartment_type": name_b,
-                        "dimension": "none",
-                        "value": r_dict[feature],
-                    }
-                )
+                for feature in ("frac_above", "frac_intersect", "frac_below"):
+                    profile_comparison_result.append(
+                        {
+                            "specimen_id": r.Index,
+                            "feature": f"{feature}_{name_b}",
+                            "compartment_type": name_a,
+                            "dimension": "none",
+                            "value": r_dict[feature],
+                        }
+                    )
+            overlap_b_a_df = overlap_between_compartments(df_b, df_a)
+            for r in overlap_b_a_df.itertuples():
+                for feature in ("frac_above", "frac_intersect", "frac_below"):
+                    r_dict = r._asdict()
+                    profile_comparison_result.append(
+                        {
+                            "specimen_id": r.Index,
+                            "feature": f"{feature}_{name_a}",
+                            "compartment_type": name_b,
+                            "dimension": "none",
+                            "value": r_dict[feature],
+                        }
+                    )
 
     # Analyze rest of morphological features of cell
     map_input = [

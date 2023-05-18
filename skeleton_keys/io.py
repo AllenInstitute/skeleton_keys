@@ -10,7 +10,6 @@ from skeleton_keys.database_queries import (
 import os
 import io
 import re
-import json
 
 
 def fix_local_cloudpath(cloudpath):
@@ -37,7 +36,6 @@ def get_path_files(cloudpath, regex_template=None):
 
 
 def read_json_file(cloudpath):
-    path = fix_local_cloudpath(cloudpath)
     folder, file = os.path.split(cloudpath)
     cf = cloudfiles.CloudFiles(folder)
     return cf.get_json(file)

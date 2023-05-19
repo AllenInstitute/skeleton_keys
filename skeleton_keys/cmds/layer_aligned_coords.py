@@ -29,7 +29,7 @@ from skeleton_keys.drawings import (
     convert_and_translate_snapped_to_microns,
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
-from skeleton_keys.io import load_default_layer_template
+from skeleton_keys.io import load_default_layer_template, read_csv, write_dataframe_to_csv, read_json_file
 from skeleton_keys.layer_alignment import layer_aligned_y_values, cortex_thickness_aligned_y_values
 
 
@@ -69,8 +69,7 @@ def main(args):
     # Load the reference layer depths
     layer_depths_file = args['layer_depths_file']
     if layer_depths_file:
-        with open(layer_depths_file, "r") as f:
-            avg_layer_depths = json.load(f)
+        avg_layer_depths = read_json_file(layer_depths_file)
     else:
         avg_layer_depths = load_default_layer_template()
 
@@ -79,8 +78,8 @@ def main(args):
 
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
-    with open(surface_and_layers_file, "r") as f:
-        surfaces_and_paths = json.load(f)
+    surfaces_and_paths = read_json_file(surface_and_layers_file)
+    
     pia_surface = surfaces_and_paths["pia_path"]
     wm_surface = surfaces_and_paths["wm_path"]
     layer_polygons = surfaces_and_paths["layer_polygons"]
@@ -97,7 +96,7 @@ def main(args):
         no_layers = False
 
     # Load the coordinates
-    coord_df = pd.read_csv(coordinate_file)
+    coord_df = read_csv(coordinate_file)
 
     # Names of coordinate columns
     prefix = args["coordinate_column_prefix"]
@@ -181,7 +180,7 @@ def main(args):
 
     # save to cvs
     output_file = args["output_file"]
-    new_coord_df.to_csv(output_file, index=False)
+    write_dataframe_to_csv(new_coord_df, output_file, index=False)
 
 
 def console_script():

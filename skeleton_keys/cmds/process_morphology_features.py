@@ -29,7 +29,7 @@ import os
 
 
 class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
-    specimen_id_file = ags.fields.InputFile(
+    specimen_id_file = cloudfields.InputFile(
         description="File with specimen IDs on each line",
     )
     specimen_id = ags.fields.Integer(
@@ -47,12 +47,12 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         allow_none=True,
         description="optional - folder to find swc files, assuming specimen_id.swc is filename",
     )
-    aligned_depth_profile_file = ags.fields.InputFile(
+    aligned_depth_profile_file = cloudfields.InputFile(
         description="CSV file with layer-aligned depth profile. If None, depth PCs and EMD features aren't quantified",
         allow_none=True,
         default=None,
     )
-    aligned_soma_file = ags.fields.InputFile(
+    aligned_soma_file = cloudfields.InputFile(
         description="CSV file with layer-aligned soma depth information. If None, soma depth are not calculated.",
         allow_none=True,
         default=None,
@@ -79,37 +79,37 @@ class ProcessMorphologyFeaturesParameters(ags.ArgSchema):
         description="Whether to analyze depth profile of basal dendrite compartments",
         default=False,
     )
-    axon_depth_profile_loadings_file = ags.fields.InputFile(
+    axon_depth_profile_loadings_file = cloudfields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing axon depth profile loadings",
     )
-    basal_dendrite_depth_profile_loadings_file = ags.fields.InputFile(
+    basal_dendrite_depth_profile_loadings_file = cloudfields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing basal dendrite depth profile loadings",
     )
-    apical_dendrite_depth_profile_loadings_file = ags.fields.InputFile(
+    apical_dendrite_depth_profile_loadings_file = cloudfields.InputFile(
         default=None,
         allow_none=True,
         description="CSV with pre-existing apical dendrite depth profile loadings",
     )
-    save_axon_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_axon_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save axon depth profile loadings",
     )
-    save_basal_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_basal_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save basal dendrite depth profile loadings",
     )
-    save_apical_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_apical_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save apical dendrite depth profile loadings",
     )
-    output_file = ags.fields.OutputFile(
+    output_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Long-form CSV of un-normalized features",

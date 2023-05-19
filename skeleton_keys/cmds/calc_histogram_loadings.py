@@ -1,6 +1,5 @@
 import argschema as ags
 import numpy as np
-import pandas as pd
 from skeleton_keys.io import read_bytes, read_csv
 from skeleton_keys.cmds.process_morphology_features import (
     select_and_convert_depth_columns,

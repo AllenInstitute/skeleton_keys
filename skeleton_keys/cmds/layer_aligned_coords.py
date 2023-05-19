@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import argschema as ags
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
-    run_streamlines, convert_path_str_to_list
+    run_streamlines,
+    convert_path_str_to_list,
 )
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 from neuron_morphology.transforms.affine_transform import (
@@ -29,26 +30,34 @@ from skeleton_keys.drawings import (
     convert_and_translate_snapped_to_microns,
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
-from skeleton_keys.io import load_default_layer_template, read_csv, write_dataframe_to_csv, read_json_file
-from skeleton_keys.layer_alignment import layer_aligned_y_values, cortex_thickness_aligned_y_values
+from skeleton_keys.io import (
+    load_default_layer_template,
+    read_csv,
+    write_dataframe_to_csv,
+    read_json_file,
+)
+from skeleton_keys.layer_alignment import (
+    layer_aligned_y_values,
+    cortex_thickness_aligned_y_values,
+)
+from skeleton_keys import cloudfields
 
 
 class LayerAlignedCoordsSchema(ags.ArgSchema):
-    coordinate_file = ags.fields.InputFile(
-        description="CSV file with three coordinate columns")
-    layer_depths_file = ags.fields.InputFile(default=None, allow_none=True)
-    output_file = ags.fields.OutputFile(
-        description="CSV file with adjusted coordinates",
-        default="output.csv")
+    coordinate_file = cloudfields.InputFile(
+        description="CSV file with three coordinate columns"
+    )
+    layer_depths_file = cloudfields.InputFile(default=None, allow_none=True)
+    output_file = cloudfields.OutputFile(
+        description="CSV file with adjusted coordinates", default="output.csv"
+    )
     coordinate_column_prefix = ags.fields.String(
-        description="common prefix for coordinate columns",
-        default=""
+        description="common prefix for coordinate columns", default=""
     )
     coordinate_column_suffix = ags.fields.String(
-        description="common suffix for coordinate columns",
-        default=""
+        description="common suffix for coordinate columns", default=""
     )
-    surface_and_layers_file = ags.fields.InputFile(
+    surface_and_layers_file = cloudfields.InputFile(
         description="JSON file with surface and layer polygon paths",
         default=None,
         allow_none=False,
@@ -67,19 +76,18 @@ def main(args):
     coordinate_file = args["coordinate_file"]
 
     # Load the reference layer depths
-    layer_depths_file = args['layer_depths_file']
+    layer_depths_file = args["layer_depths_file"]
     if layer_depths_file:
         avg_layer_depths = read_json_file(layer_depths_file)
     else:
         avg_layer_depths = load_default_layer_template()
-
 
     layer_list = args["layer_list"]
 
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
     surfaces_and_paths = read_json_file(surface_and_layers_file)
-    
+
     pia_surface = surfaces_and_paths["pia_path"]
     wm_surface = surfaces_and_paths["wm_path"]
     layer_polygons = surfaces_and_paths["layer_polygons"]
@@ -124,10 +132,14 @@ def main(args):
 
     # Calculate rotation angle from the mean of the coordinates
     if soma_path is not None:
-        logging.info("Using specified soma location in layer drawings file to determine upright angle")
+        logging.info(
+            "Using specified soma location in layer drawings file to determine upright angle"
+        )
         upright_angle = get_upright_angle(gradient_field)
     else:
-        logging.info("No soma location specified in layer drawings file; using coordinate centroid to determine upright angle")
+        logging.info(
+            "No soma location specified in layer drawings file; using coordinate centroid to determine upright angle"
+        )
         upright_angle = get_upright_angle(
             gradient_field,
             coord_df[coord_cols].mean(axis=0).tolist(),
@@ -144,8 +156,10 @@ def main(args):
     if no_layers:
         logging.info("Calculating cortex-thickness adjusted depths for all points")
         y_values = cortex_thickness_aligned_y_values(
-            coords_to_transform[:, 0], coords_to_transform[:, 1],
-            avg_layer_depths, depth_field
+            coords_to_transform[:, 0],
+            coords_to_transform[:, 1],
+            avg_layer_depths,
+            depth_field,
         )
     else:
         # snap together hand-drawn layer borders and determine pia/wm sides
@@ -160,10 +174,14 @@ def main(args):
 
         logging.info("Calculating layer-aligned depths for all points")
         y_values = layer_aligned_y_values(
-            coords_to_transform[:, 0], coords_to_transform[:, 1],
-            avg_layer_depths, layer_list, depth_field, gradient_field, snapped_polys_surfs
+            coords_to_transform[:, 0],
+            coords_to_transform[:, 1],
+            avg_layer_depths,
+            layer_list,
+            depth_field,
+            gradient_field,
+            snapped_polys_surfs,
         )
-
 
     # upright the coordinates
     rotation_upright_matrix = rotation_from_angle(upright_angle, axis=2)

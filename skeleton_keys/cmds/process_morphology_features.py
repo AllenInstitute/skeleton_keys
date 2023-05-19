@@ -14,6 +14,7 @@ from skeleton_keys.depth_profile import (
     overlap_between_compartments,
 )
 from skeleton_keys.feature_definition import default_features
+from skeleton_keys.io import read_bytes
 from neuron_morphology.swc_io import morphology_from_swc
 from neuron_morphology.feature_extractor.data import Data
 from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor
@@ -143,12 +144,12 @@ def analyze_depth_profiles(df, preexisting_file, output_file):
 
 
 def specimen_morph_features(
-        specimen_id,
-        swc_path,
-        layer_list,
-        analyze_axon,
-        analyze_apical_dendrite,
-        analyze_basal_dendrite,
+    specimen_id,
+    swc_path,
+    layer_list,
+    analyze_axon,
+    analyze_apical_dendrite,
+    analyze_basal_dendrite,
 ):
     # Load the morphology and transform if necessary
     morph = morphology_from_swc(swc_path)
@@ -176,7 +177,7 @@ def specimen_morph_features(
         "max_path_distance",
         "mean_contraction",
         "num_outer_bifurcations",
-        "early_branch_path"
+        "early_branch_path",
     ]
     dendrite_only_features = [
         "total_surface_area",
@@ -228,15 +229,16 @@ def specimen_morph_features(
             result_y["value"] = value[1]
             result_list += [result_x, result_y]
         elif primary_feature == "moments_along_max_distance_projection" and (
-                split_name[-1] == "mean" or split_name[-1] == "std"):
+            split_name[-1] == "mean" or split_name[-1] == "std"
+        ):
             statistical_metric = split_name[-1]
             result["feature"] = f"{statistical_metric}_{result['feature']}"
             result["dimension"] = "none"
             result["value"] = value
             result_list.append(result)
         elif primary_feature in dendrite_only_features and compartment_name in (
-                "basal_dendrite",
-                "apical_dendrite",
+            "basal_dendrite",
+            "apical_dendrite",
         ):
             result["dimension"] = "none"
             result["value"] = value
@@ -383,9 +385,13 @@ def main(args):
             available_ids = axon_depth_df.index.intersection(specimen_ids)
             if len(available_ids) != len(specimen_ids):
                 missing_apical_num = len(specimen_ids) - len(available_ids)
-                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have axons')
+                logging.warning(
+                    f"{missing_apical_num} out of {specimen_ids} neurons passed do no have axons"
+                )
             if len(available_ids) == 0:
-                raise Exception(f'None of the neurons passed have axon identified nodes (label 2, in columns beginning with 2_) in the depth profiles file at {aligned_depth_profile_file}')
+                raise Exception(
+                    f"None of the neurons passed have axon identified nodes (label 2, in columns beginning with 2_) in the depth profiles file at {aligned_depth_profile_file}"
+                )
             transformed = analyze_depth_profiles(
                 axon_depth_df.loc[available_ids, :],
                 args["axon_depth_profile_loadings_file"],
@@ -408,9 +414,13 @@ def main(args):
             available_ids = apical_depth_df.index.intersection(specimen_ids)
             if len(available_ids) != len(specimen_ids):
                 missing_apical_num = len(specimen_ids) - len(available_ids)
-                logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons do no have apicals')
+                logging.warning(
+                    f"{missing_apical_num} out of {specimen_ids} neurons do no have apicals"
+                )
             if len(available_ids) == 0:
-                raise Exception(f'None of the neurons passed have apical identified nodes (label 4, in columns beginning with 4_) in the depth profiles file at {aligned_depth_profile_file}')
+                raise Exception(
+                    f"None of the neurons passed have apical identified nodes (label 4, in columns beginning with 4_) in the depth profiles file at {aligned_depth_profile_file}"
+                )
             transformed = analyze_depth_profiles(
                 apical_depth_df.loc[available_ids, :],
                 args["apical_dendrite_depth_profile_loadings_file"],
@@ -438,9 +448,13 @@ def main(args):
                 available_ids = basal_depth_df.index.intersection(specimen_ids)
                 if len(available_ids) != len(specimen_ids):
                     missing_apical_num = len(specimen_ids) - len(available_ids)
-                    logging.warning(f'{missing_apical_num} out of {specimen_ids} neurons passed do no have basal-identified nodes')
+                    logging.warning(
+                        f"{missing_apical_num} out of {specimen_ids} neurons passed do no have basal-identified nodes"
+                    )
                 if len(available_ids) == 0:
-                    raise Exception(f'None of the neurons passed have basal identified nodes (label 3, in columns beginning with 3_) in the depth profiles file at {aligned_depth_profile_file}')
+                    raise Exception(
+                        f"None of the neurons passed have basal identified nodes (label 3, in columns beginning with 3_) in the depth profiles file at {aligned_depth_profile_file}"
+                    )
                 transformed = analyze_depth_profiles(
                     basal_depth_df.loc[available_ids, :],
                     args["basal_dendrite_depth_profile_loadings_file"],

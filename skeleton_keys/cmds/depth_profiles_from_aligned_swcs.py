@@ -2,7 +2,6 @@ import argschema as ags
 import os
 import numpy as np
 import pandas as pd
-import json
 from skeleton_keys.io import (
     load_swc_as_dataframe,
     load_default_layer_template,

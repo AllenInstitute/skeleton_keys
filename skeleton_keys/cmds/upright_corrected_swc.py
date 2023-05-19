@@ -1,4 +1,3 @@
-import json
 import shapely
 import numpy as np
 import pandas as pd

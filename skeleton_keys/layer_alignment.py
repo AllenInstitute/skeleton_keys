@@ -5,8 +5,8 @@ import shapely.vectorized
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from shapely.geometry import LineString
-from typing import Dict, List, Tuple, Optional
-from neuron_morphology.layered_point_depths.__main__ import tuplize, setup_interpolator
+from typing import Tuple, Optional
+from neuron_morphology.layered_point_depths.__main__ import setup_interpolator
 from tqdm import tqdm
 
 

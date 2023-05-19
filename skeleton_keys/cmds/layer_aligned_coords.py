@@ -1,35 +1,18 @@
-import json
 import logging
-import numpy as np
-import pandas as pd
 import argschema as ags
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
     run_streamlines,
-    convert_path_str_to_list,
 )
 from neuron_morphology.transforms.upright_angle.compute_angle import get_upright_angle
 from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle,
     affine_from_transform_translation,
-    affine_from_translation,
     AffineTransform,
 )
-from neuron_morphology.morphology import Morphology
-from skeleton_keys.database_queries import (
-    query_for_image_series_id,
-    swc_paths_from_database,
-    pia_wm_soma_from_database,
-    layer_polygons_from_database,
-    shrinkage_factor_from_database,
-    query_pinning_info,
-    determine_flip_switch,
-)
-from skeleton_keys.slice_angle import slice_angle_tilt
 from skeleton_keys.drawings import (
     snap_hand_drawn_polygons,
     convert_and_translate_snapped_to_microns,
 )
-from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.io import (
     load_default_layer_template,
     read_csv,

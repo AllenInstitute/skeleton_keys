@@ -19,7 +19,7 @@ from skeleton_keys.io import (
     write_dataframe_to_csv,
     read_csv,
 )
-from skeleton_keys import cloudfields
+import skeleton_keys.cloudfields as cloudfields
 from neuron_morphology.swc_io import morphology_from_swc
 from neuron_morphology.feature_extractor.data import Data
 from neuron_morphology.feature_extractor.feature_extractor import FeatureExtractor

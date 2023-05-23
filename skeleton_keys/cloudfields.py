@@ -50,7 +50,7 @@ class OutputFile(mm.fields.Str):
             cf.delete(f".cftest_{hex}")
         except Exception as e:  # pragma: no cover
             raise mm.ValidationError(
-                "%s cannot be written to cloud " % value
+                f"{value} cannot be written to cloud "
             )  # pragma: no cover
 
 
@@ -93,21 +93,21 @@ class OutputDir(mm.fields.Str):
 def validate_input_path(value):
     if "://" not in value:
         if not os.path.isfile(value):
-            raise mm.ValidationError("%s is not a file" % value)
+            raise mm.ValidationError(f"{value} is not a file")
         else:
             try:
                 with open(value) as f:
                     pass
             except Exception as value:
-                raise mm.ValidationError("%s is not readable" % value)
+                raise mm.ValidationError(f"{value} is not readable")
     else:
         cloudpath, file = os.path.split(value)
         try:
             cf = cloudfiles.CloudFiles(cloudpath)
             if not cf.exists(file):
-                raise mm.ValidationError("%s is not readable in cloud" % value)
+                raise mm.ValidationError(f"{value} is not readable in cloud")
         except ValueError:
-            raise mm.ValidationError("%s is not readable in cloud" % value)
+            raise mm.ValidationError(f"{value} is not readable in cloud")
 
 
 class InputDir(mm.fields.Str):
@@ -119,26 +119,26 @@ class InputDir(mm.fields.Str):
     def _validate(self, value):
         if "://" not in value:
             if not os.path.isdir(value):
-                raise mm.ValidationError("%s is not a directory")
+                raise mm.ValidationError(f"{value} is not a directory")
 
             if sys.platform == "win32":
                 try:
                     x = list(os.scandir(value))
                 except PermissionError:
-                    raise mm.ValidationError("%s is not a readable directory" % value)
+                    raise mm.ValidationError(f"{value} is not a readable directory")
             else:
                 if not os.access(value, os.R_OK):
-                    raise mm.ValidationError("%s is not a readable directory" % value)
+                    raise mm.ValidationError(f"{value} is not a readable directory")
         else:
             try:
                 cf = cloudfiles.CloudFiles(value)
                 if not cf.isdir():
                     raise mm.ValidationError(
-                        "%s is not a readable cloudpath directory" % value
+                        f"{value} is not a readable cloudpath directory"
                     )
             except:
                 raise mm.ValidationError(
-                    "%s is not a readable cloudpath directory" % value
+                    f"{value} is not a readable cloudpath directory"
                 )
 
 

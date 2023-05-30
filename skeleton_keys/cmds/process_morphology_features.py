@@ -2,7 +2,7 @@ import argschema as ags
 import numpy as np
 import pandas as pd
 import logging
-from multiprocessing import Pool
+from multiprocessing.dummy import Pool
 from skeleton_keys.database_queries import (
     swc_paths_from_database,
 )
@@ -162,6 +162,7 @@ def specimen_morph_features(
     analyze_apical_dendrite,
     analyze_basal_dendrite,
 ):
+    print(swc_path)
     # Load the morphology and transform if necessary
     morph = morphology_from_swc(swc_path)
 
@@ -411,6 +412,7 @@ def main(args):
         # Assumes that depth profile file has columns in the format:
         # "{compartment label}_{feature number}"
         depth_profile_df = read_csv(aligned_depth_profile_file, index_col=0)
+        depth_profile_df = depth_profile_df.loc[specimen_ids]
 
         axon_depth_df = None
         apical_depth_df = None
@@ -451,7 +453,7 @@ def main(args):
             if len(available_ids) != len(specimen_ids):
                 missing_apical_num = len(specimen_ids) - len(available_ids)
                 logging.warning(
-                    f"{missing_apical_num} out of {specimen_ids} neurons do no have apicals"
+                    f"{missing_apical_num} out of {len(specimen_ids)} neurons do no have apicals"
                 )
             if len(available_ids) == 0:
                 raise Exception(

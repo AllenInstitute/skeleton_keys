@@ -10,3 +10,4 @@ geopandas
 ccf-streamlines
 rasterio
 task-queue
+xarray

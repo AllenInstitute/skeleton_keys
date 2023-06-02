@@ -148,7 +148,7 @@ def main(args):
     morph_pt_norm_export = morph_pt_norm.copy()
     morph_pt_norm_export.columns = labs
     morph_pt_norm_export = morph_pt_norm_export[sorted(labs, key=_natural_sort_key)]
-    write_dataframe_to_csv(morph_pt_raw_export, output_normalized_file)
+    write_dataframe_to_csv(morph_pt_norm_export, output_normalized_file)
 
     output_raw_file = args["wide_unnormalized_output_file"]
     morph_pt_raw_export = morph_pt.copy()

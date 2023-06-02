@@ -2,7 +2,10 @@ import os
 import logging
 import numpy as np
 import pandas as pd
-import allensdk.internal.core.lims_utilities as lu
+try:
+    import allensdk.internal.core.lims_utilities as lu
+except ImportError:
+    logging.warning('no lims internal installed')
 from functools import partial
 from neuron_morphology.marker import read_marker_file
 from neuron_morphology.snap_polygons.types import ensure_path

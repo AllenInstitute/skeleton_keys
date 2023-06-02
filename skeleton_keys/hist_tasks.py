@@ -72,7 +72,7 @@ def extract_morphology_features(
         "apical_dendrite_depth_profile_loadings_file": apical_dendrite_depth_profile_loadings_file,
         "output_file": output_file,
     }
-
+    print(f'{specimen_id_file}')
     input_data = {k: v for k, v in input_data.items() if v is not None}
     module = argschema.ArgSchemaParser(
         schema_type=ProcessMorphologyFeaturesParameters, input_data=input_data, args=[]

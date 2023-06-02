@@ -1,5 +1,5 @@
 from skeleton_keys.hist_tasks import create_layer_histograms
-
+from skeleton_keys.tasks import *
 from taskqueue import TaskQueue
 import sys
 

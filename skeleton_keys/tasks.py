@@ -51,6 +51,7 @@ def layer_align_cell(
     module = argschema.ArgSchemaParser(
         schema_type=LayerAlignedSwcSchema, input_data=input_data, args=[]
     )
+    print(f'starting {specimen_id}')
     layer_align_main(module.args)
 
 

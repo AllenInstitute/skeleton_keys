@@ -72,9 +72,18 @@ def main(args):
     resolution = 10
     rspc = ReferenceSpaceCache(resolution, reference_space_key, manifest='manifest.json')
     tree = rspc.get_structure_tree(structure_graph_id=1)
-
+    acronym_map = rspc.get_reference_space().structure_tree.get_id_acronym_map()
     base_orientation = args['base_orientation']
 
+    # Check if the cells soma is out of cortex, if it is we will use the nearest isocortex voxel in place of its soma
+    isocortex_struct_id = acronym_map['Isocortex']
+    out_of_cortex_bool, nearest_cortex_coord = full_morph.check_coord_out_of_cortex(soma_coords,
+                                                                                    isocortex_struct_id,
+                                                                                    atlas_volume,
+                                                                                    args['closest_surface_voxel_file'],
+                                                                                    args['surface_paths_file'],
+                                                                                    tree)
+    
     if base_orientation is None:
         atlas_slice, q = full_morph.min_curvature_atlas_slice_for_morph(
             morph,
@@ -83,11 +92,13 @@ def main(args):
             args["surface_paths_file"],
             args["pia_curvature_surface_file"],
             args["wm_curvature_surface_file"],
+            nearest_cortex_coord
         )
 
-        rot_morph = full_morph.rotate_morphology_for_drawings_by_rotation(
-            morph, q)
-        rot_morph = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice)
+        rot_morph, rot_nearest_cortex_coord = full_morph.rotate_morphology_for_drawings_by_rotation(
+            morph, q, nearest_cortex_coord)
+        rot_morph, rot_nearest_cortex_coord = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice,
+                                                                                      rot_nearest_cortex_coord)
     else:
         atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
             morph,
@@ -96,9 +107,10 @@ def main(args):
             args["surface_paths_file"],
             base_orientation=base_orientation,
             return_angle=True,
+            closest_cortex_node=nearest_cortex_coord,
         )
-        rot_morph = full_morph.rotate_morphology_for_drawings_by_angle(
-            morph, angle_rad, base_orientation)
+        rot_morph, rot_nearest_cortex_coord = full_morph.rotate_morphology_for_drawings_by_angle(
+            morph, angle_rad, base_orientation, nearest_cortex_coord)
 
     atlas_slice = full_morph.select_structures_of_interest(
         atlas_slice,
@@ -134,9 +146,14 @@ def main(args):
         "Isocortex layer 6a": "Layer6a",
         "Isocortex layer 6b": "Layer6b",
     }
+    
+    # If the soma was out of cortex we will pass in the nearest cortex node to the drawings output file
+    if out_of_cortex_bool:
+        soma_drawing_data = [float(rot_nearest_cortex_coord[0]), float(rot_nearest_cortex_coord[1])]
+    else:
+        rot_soma = rot_morph.get_soma()
+        soma_drawing_data = [float(rot_soma['x']), float(rot_soma['y'])]
 
-    rot_soma = rot_morph.get_soma()
-    rot_soma_coords = [float(rot_soma['x']), float(rot_soma['y'])]
     drawing_data = {}
     drawing_data["pia_path"] = {
         "name": "Pia",
@@ -151,7 +168,7 @@ def main(args):
     drawing_data["soma_path"] = {
         "name": "Soma",
         "resolution": 1.0,
-        "path": [rot_soma_coords],
+        "path": [soma_drawing_data],
     }
 
     simplifed_boundaries = drawings.simplify_layer_boundaries(

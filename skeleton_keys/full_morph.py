@@ -2,6 +2,7 @@ import logging
 import vtk
 import numpy as np
 from ccf_streamlines.angle import find_closest_streamline
+from ccf_streamlines.coordinates import coordinates_to_voxels
 from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle, affine_from_transform_translation, affine_from_translation, AffineTransform
 )
@@ -11,9 +12,111 @@ from scipy.interpolate import interpn
 from scipy.spatial.distance import euclidean
 from scipy.spatial.transform import Rotation
 from vtk.util.numpy_support import vtk_to_numpy
+from scipy import ndimage
+from scipy.spatial import KDTree
 
 
-def rotate_morphology_for_drawings_by_angle(morphology, angle_for_atlas_slice, base_orientation='coronal'):
+def check_coord_out_of_cortex(coordinate, structure_id, atlas_volume, closest_surface_voxel_file, surface_paths_file,
+                              tree):
+    """
+    Check if a given ccf coordinate (microns) is located outside a certain CCF structure
+
+    :param coordinate: array (1x3)
+        Location of coordinate to check (microns)
+    :param structure_id: int
+        ccf structure id to check if the input coordinate is in. E.g. if structure_id=315,
+        this script would check if the input coordinate is located in iso-cortex
+    :param atlas_volume: 3d atlas array
+        Region-annotated CCF atlas volume
+    :param closest_surface_voxel_file: str
+        Closest surface voxel reference HDF5 file path for angle calculation
+    :param surface_paths_file: str
+        Surface paths (streamlines) HDF5 file path for slice angle calculation:
+    :param tree: structure tree
+        from allensdk package:
+
+    :return:
+    out_of_cortex : bool
+        True if the input coordinate is out of cortex, otherwise is False
+    nearest_cortex_coord : array/None
+        Nearest iso-cortex coordinate if the input coordinate is out of cortex, otherwise is None
+
+    """
+    # get structure of input voxel
+    voxel = coordinates_to_voxels(coordinate.reshape(1, 3))[0]
+    voxel_struct_id = atlas_volume[voxel[0], voxel[1], voxel[2]]
+
+    # find all descendant structures of input structure_id
+    structure_ids = tree.descendant_ids([structure_id])[0]
+
+    nearest_cortex_coord = None
+    out_of_cortex = False
+    if voxel_struct_id not in structure_ids:
+        # the structure does not contain our coordinate of interest, find the nearest voxel
+        nearest_cortex_coord, nearest_cortex_voxel = find_neaerst_isocortex_structure(voxel,
+                                                                                      atlas_volume,
+                                                                                      structure_ids,
+                                                                                      closest_surface_voxel_file,
+                                                                                      surface_paths_file)
+        nearest_cortex_coord = np.array([nearest_cortex_coord[0], nearest_cortex_coord[1], nearest_cortex_coord[2]])
+
+        out_of_cortex = True
+
+    return out_of_cortex, nearest_cortex_coord
+
+
+def find_neaerst_isocortex_structure(out_of_cortex_voxel, atlas_volume, isocortex_ids,
+                                     closest_surface_voxel_file, surface_paths_file, atlas_resolution=10.):
+    """
+    Given an out of cortex voxel, this will find the nearest iso-cortex voxel. This will take the 3-d isocortex annotation and
+    erode it one step leaving us the "shell" of isocortex. The nearest point
+
+    :param out_of_cortex_voxel: array (1x3)
+        voxel location of point that is out of cortex
+    :param atlas_volume: 3d atlas array
+        Region-annotated CCF atlas volume
+    :param isocortex_ids: list
+        list of iso-cortex structure ids (ints)
+    :param closest_surface_voxel_file: str
+        Closest surface voxel reference HDF5 file path for angle calculation
+    :param surface_paths_file: str
+        Surface paths (streamlines) HDF5 file path for slice angle calculation
+    :param atlas_resolution: float, default 10.
+        Voxel size of atlas volume (microns)
+
+    :return:
+    soma_coords : array
+        closest isocortex point (micron)
+    new_soma_voxel : array
+        closest isocortex point (voxel)
+    """
+
+    # Mask isocortex structures and erode one step
+    isocortex_mask = np.isin(atlas_volume, isocortex_ids)
+    struct = ndimage.generate_binary_structure(3, 3)
+    eroded_cortex_mask = ndimage.morphology.binary_erosion(isocortex_mask, structure=struct).astype(int)
+
+    isocortex_perimeter = np.subtract(isocortex_mask, eroded_cortex_mask)
+    perim_coords = np.array(np.where(isocortex_perimeter != 0)).T
+
+    # Find nearest isocortex voxel
+    perim_kd_tree = KDTree(perim_coords)
+    dists, inds = perim_kd_tree.query(out_of_cortex_voxel.reshape(1, 3), k=1)
+    perim_coord_index = inds[0]
+
+    closest_cortex_voxel = perim_coords[perim_coord_index]
+    closest_cortex_coord = atlas_resolution * closest_cortex_voxel
+
+    streamline = find_closest_streamline(closest_cortex_coord, closest_surface_voxel_file, surface_paths_file)
+
+    # go one up to prevent this coord from existing directly on the white matter boundary
+    closest_cortex_coord = streamline[-2]
+    new_soma_voxel = closest_cortex_coord / atlas_resolution
+
+    return closest_cortex_coord, new_soma_voxel.astype(int)
+
+def rotate_morphology_for_drawings_by_angle(morphology, angle_for_atlas_slice, base_orientation='coronal',
+                                            additional_data=None):
     """ Rotate a whole-brain morphology to line up with angled atlas image
 
     In the CCF, x is anterior/posterior, y is dorsal/ventral, and z is left/right
@@ -36,7 +139,10 @@ def rotate_morphology_for_drawings_by_angle(morphology, angle_for_atlas_slice, b
         Angle of atlas slice to align to streamline (radians)
     base_orientation : str, default 'coronal'
         Initial slice orientation - either 'coronal' or 'parasagittal'
-
+    additional_data : nx3 array, None
+        Additional coordinates to apply the same rotation to. Specifically useful when
+        a cells soma is in the white matter and the nearest iso-cortex voxel needs to be
+        rotated to line up with the angled atlas image.
     Returns
     -------
     morphology : Morphology
@@ -62,13 +168,13 @@ def rotate_morphology_for_drawings_by_angle(morphology, angle_for_atlas_slice, b
         raise ValueError("base_orientation must be 'coronal' or 'parasagittal'")
 
     rotation_tilt_matrix = rotation_from_angle(-angle_for_atlas_slice, axis=rot_axis)
-    morphology = _rotate_morphology_around_soma(morphology, rotation_tilt_matrix)
-    morphology = _swap_morphology_coordinates(morphology, coordinate_swap_matrix)
+    morphology, additional_data = _rotate_morphology_around_soma(morphology, rotation_tilt_matrix, additional_data)
+    morphology, additional_data = _swap_morphology_coordinates(morphology, coordinate_swap_matrix, additional_data)
 
-    return morphology
+    return morphology, additional_data
 
 
-def rotate_morphology_for_drawings_by_rotation(morphology, q):
+def rotate_morphology_for_drawings_by_rotation(morphology, q, additional_data=None):
     """ Rotate a whole-brain morphology to line up with angled atlas image
 
     In the CCF, x is anterior/posterior, y is dorsal/ventral, and z is left/right
@@ -89,6 +195,10 @@ def rotate_morphology_for_drawings_by_rotation(morphology, q):
         Full brain morphology, aligned to CCF (micron scale)
     q : Rotation
         SciPy rotation object that generated the angled atlas image
+    additional_data : nx3 array, None
+        Additional coordinates to apply the same rotation to. Specifically useful when
+        a cells soma is in the white matter and the nearest iso-cortex voxel needs to be
+        rotated to line up with the angled atlas image.
 
     Returns
     -------
@@ -98,19 +208,19 @@ def rotate_morphology_for_drawings_by_rotation(morphology, q):
     """
 
     M = q.inv().as_matrix()
-    morphology = _rotate_morphology_around_soma(morphology, M)
+    morphology, additional_data = _rotate_morphology_around_soma(morphology, M, additional_data)
 
     coordinate_swap_matrix = np.array([
         [0, 1, 0],
         [1, 0, 0],
         [0, 0, 1],
     ])
-    morphology = _swap_morphology_coordinates(morphology, coordinate_swap_matrix)
+    morphology, additional_data = _swap_morphology_coordinates(morphology, coordinate_swap_matrix, additional_data)
 
-    return morphology
+    return morphology, additional_data
 
 
-def align_morphology_to_drawings(morphology, atlas_slice, atlas_resolution=10.):
+def align_morphology_to_drawings(morphology, atlas_slice, closest_cortex_node=None, atlas_resolution=10.):
     """ Move the soma to the center of a set of drawings
 
     Parameters
@@ -121,28 +231,37 @@ def align_morphology_to_drawings(morphology, atlas_slice, atlas_resolution=10.):
         Angled atlas slice with CCF region IDs as values
     atlas_resolution : float, default 10
         Voxel size of atlas volume (microns)
+    closest_cortex_node : array, default None
+        If the morphologys soma is outside the cortex, this value is used as a proxy
+        for the soma location. It represents the closest isocortex node to the cells soma.
 
     Returns
     -------
     aligned_morphology : Morphology
         Translated morphology
     """
+    if closest_cortex_node is None:
+        morph_soma = morphology.get_soma()
+        soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
+    else:
+        soma_coords = closest_cortex_node
+
     # Align morphology to center of drawings
-    soma_morph = morphology.get_soma()
     translation = np.array([
-        -soma_morph['x'] + atlas_resolution * atlas_slice.shape[0] / 2,
-        -soma_morph["y"] + atlas_resolution * atlas_slice.shape[1] / 2,
-        -soma_morph["z"]
+        -soma_coords[0] + atlas_resolution * atlas_slice.shape[0] / 2,
+        -soma_coords[1] + atlas_resolution * atlas_slice.shape[1] / 2,
+        -soma_coords[2]
     ])
     translation_affine = affine_from_translation(translation)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morphology)
+    if closest_cortex_node is not None:
+        T_translate.transform(closest_cortex_node)
 
-    return morphology
+    return morphology, closest_cortex_node
 
-
-def _rotate_morphology_around_soma(morphology, M):
-    """Rotates morphology around its soma but maintains original position"""
+def _rotate_morphology_around_soma(morphology, M, additional_data=None):
+    """Rotates morphology (and additional data) around its soma but maintains original position"""
 
     # center on soma before rotation
     soma_morph = morphology.get_soma()
@@ -152,30 +271,36 @@ def _rotate_morphology_around_soma(morphology, M):
     translation_affine = affine_from_translation(translation_to_origin)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morphology)
+    if additional_data is not None:
+        additional_data = T_translate.transform(additional_data)
 
     # Rotate
     rotation_tilt_affine = affine_from_transform_translation(transform=M)
     T_rotate = AffineTransform(rotation_tilt_affine)
     T_rotate.transform_morphology(morphology)
+    if additional_data is not None:
+        additional_data = T_rotate.transform(additional_data)
 
     # Move back
     translation_affine = affine_from_translation(translation_back_to_soma_location)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morphology)
+    if additional_data is not None:
+        additional_data = T_translate.transform(additional_data)
 
-    return morphology
+    return morphology, additional_data
 
-
-def _swap_morphology_coordinates(morphology, M):
+def _swap_morphology_coordinates(morphology, M, additional_data=None):
     """Use matrix to switch coordinates"""
 
     # Swap coordinates
     swap_affine = affine_from_transform_translation(transform=M)
     T_swap = AffineTransform(swap_affine)
     T_swap.transform_morphology(morphology)
+    if additional_data is not None:
+        additional_data = T_swap.transform(additional_data)
 
-    return morphology
-
+    return morphology, additional_data
 
 def _angle_between_streamline_and_plane(streamline_coords, norm_vec):
     norm_unit = norm_vec / euclidean(norm_vec, [0, 0, 0])
@@ -193,9 +318,9 @@ def _angle_between_streamline_and_plane(streamline_coords, norm_vec):
 
 
 def angled_atlas_slice_for_morph(morph, atlas_volume,
-        closest_surface_voxel_reference_file, surface_paths_file,
-        base_orientation='auto',
-        atlas_resolution=10., return_angle=True):
+                                 closest_surface_voxel_reference_file, surface_paths_file,
+                                 base_orientation='auto', closest_cortex_node=None,
+                                 atlas_resolution=10., return_angle=True):
     """ Create an angled atlas slice lined up with a cell's streamline
 
     Parameters
@@ -211,6 +336,10 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
     base_orientation : str, default 'auto'
         Initial slice orientation - either 'auto' (pick option with smaller tilt),
         'coronal' or 'parasagittal'
+    closest_cortex_node : array, default None
+        If the morphology's soma is outside the cortex, this value is required to
+        find the nearest streamline. It represents the closest isocortex node to
+        the cells soma.
     atlas_resolution : float, default 10
         Voxel size of atlas volume (microns)
     return_angle : bool, default True
@@ -226,8 +355,11 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
         Orientation of slice (for auto selection; otherwise matches base_orientation)
     """
 
-    morph_soma = morph.get_soma()
-    soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
+    if closest_cortex_node is None:
+        morph_soma = morph.get_soma()
+        soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
+    else:
+        soma_coords = closest_cortex_node
 
     # Find streamline for cell
     morph_streamline = find_closest_streamline(
@@ -241,11 +373,13 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
         if np.abs(para_angle_deg) < np.abs(coronal_angle_deg):
             norm_vec = para_norm_vec
             base_orientation = 'parasagittal'
-            logging.info(f"Auto selecting parasagittal orientation ({para_angle_deg:.2f} angle vs {coronal_angle_deg:.2f} for coronal)")
+            logging.info(
+                f"Auto selecting parasagittal orientation ({para_angle_deg:.2f} angle vs {coronal_angle_deg:.2f} for coronal)")
         else:
             norm_vec = coronal_norm_vec
             base_orientation = 'coronal'
-            logging.info(f"Auto selecting coronal orientation ({coronal_angle_deg:.2f} angle vs {para_angle_deg:.2f} for parasagittal)")
+            logging.info(
+                f"Auto selecting coronal orientation ({coronal_angle_deg:.2f} angle vs {para_angle_deg:.2f} for parasagittal)")
     elif base_orientation == 'coronal':
         norm_vec = [1, 0, 0]
     elif base_orientation == 'parasagittal':
@@ -304,11 +438,10 @@ def angled_atlas_slice_for_morph(morph, atlas_volume,
     else:
         return atlas_slice
 
-
 def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
-        closest_surface_voxel_reference_file, surface_paths_file,
-        pia_curvature_surface_file, wm_curvature_surface_file,
-        atlas_resolution=10.):
+                                        closest_surface_voxel_reference_file, surface_paths_file,
+                                        pia_curvature_surface_file, wm_curvature_surface_file,
+                                        closest_cortex_node=None, atlas_resolution=10., ):
     """ Create an angled atlas slice lined up with a cell's streamline
 
     The soma location of the morphology will be in the center of the returned slice.
@@ -327,6 +460,9 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
         VTP file path for pia surface curvature values
     wm_curvature_surface_file : str
         VTP file path for white matter surface curvature values
+    closest_cortex_node : array, default None
+        If the morphology's soma is outside the cortex, this value is used as a proxy
+        for the soma location. It represents the closest isocortex node to the cells soma.
     atlas_resolution : float, default 10
         Voxel size of atlas volume (microns)
 
@@ -337,9 +473,11 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
     rot : Rotation object
         Rotation object that produced the slice
     """
-
-    morph_soma = morph.get_soma()
-    soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
+    if closest_cortex_node is None:
+        morph_soma = morph.get_soma()
+        soma_coords = np.array([morph_soma['x'], morph_soma['y'], morph_soma['z']])
+    else:
+        soma_coords = closest_cortex_node
 
     # check if on right hemisphere
     on_right = False
@@ -459,7 +597,6 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
     atlas_slice = atlas_slice.reshape(reshape_size)
 
     return atlas_slice, q
-
 
 def select_structures_of_interest(atlas_image, structure_list, tree=None):
     """ Select particular structures of interest and mask out others

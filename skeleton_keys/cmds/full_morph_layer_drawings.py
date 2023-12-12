@@ -20,7 +20,9 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
     structure_list = ags.fields.List(
         ags.fields.String,
         cli_as_single_argument=True,
-        description="List of structure acronyms to include around morphology",
+        description="List of structure acronyms to include around morphology. When not provided, will find structures automatically",
+        required=False,
+        default=[]
     )
     base_orientation = ags.fields.String(
         default=None,
@@ -112,9 +114,14 @@ def main(args):
         rot_morph, rot_nearest_cortex_coord = full_morph.rotate_morphology_for_drawings_by_angle(
             morph, angle_rad, base_orientation, nearest_cortex_coord)
 
+    structure_list = args["structure_list"]
+    if not structure_list:
+        structure_list = full_morph.find_structures_morphology_occupies(rot_morph=rot_morph, atlas_slice=atlas_slice,
+                                                                        tree=tree)
+    
     atlas_slice = full_morph.select_structures_of_interest(
         atlas_slice,
-        args["structure_list"],
+        structure_list,
         tree
     )
     atlas_slice = full_morph.merge_atlas_layers(atlas_slice, tree)
@@ -186,7 +193,7 @@ def main(args):
         json.dump(drawing_data, f)
 
     morphology_to_swc(rot_morph, args['output_swc_file'])
-
+        
 
 def console_script():
     module = ags.ArgSchemaParser(schema_type=FullMorphLayerDrawingsSchema)

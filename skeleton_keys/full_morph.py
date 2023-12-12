@@ -16,6 +16,69 @@ from scipy import ndimage
 from scipy.spatial import KDTree
 
 
+def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
+                                        structures_of_interest=["Isocortex"]):#, "Entorhinal area"]):
+    """
+    Given a ccf-registered morphology this will return the overlap between the structures that cell occupies
+    and a list of regions of interest.
+    :param rot_morph: morphology
+        morphology that is in micron space that has been rotated to align with the atlas_slice
+    :param atlas_slice: 2D array
+        Region-annotated CCF atlas slice
+    :param tree: structure tree
+        from allensdk package
+    :param structures_of_interest: list
+        list of structures used to mask cell. E.g. if cell has node(s) in Pons but structures_of_interest
+        list does not contain Pons or any Pons ontological ancestors, Pons will not be returned in
+        final_structures
+
+    :return: list
+        list of structures the cell occupies that are descendants of structures_of_interest
+    """
+
+    id_by_acronym = tree.get_id_acronym_map()
+    acronym_by_id = {v: k for k, v in id_by_acronym.items()}
+    id_by_name = {v: k for k, v in tree.get_name_map().items()}
+
+    micron_to_voxel = AffineTransform.from_list([0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0])
+    voxel_rot_morph = micron_to_voxel.transform_morphology(rot_morph.clone())
+    voxel_rot_morph_nodes = np.array([[n['x'], n['y'], n['z']] for n in voxel_rot_morph.nodes()]).astype(int)
+
+    structures_morph_occupies = set(atlas_slice[voxel_rot_morph_nodes[:, 0], voxel_rot_morph_nodes[:, 1]])
+    structure_list = set([acronym_by_id[i] for i in structures_morph_occupies if i != 0])
+
+    approved_acronyms = set()
+    for roi_struct_name in structures_of_interest:
+        roi_id = id_by_name[roi_struct_name]
+        all_roi_descendants = tree.descendants([roi_id])[0]
+        for struct_dict in all_roi_descendants:
+            approved_acronyms.add(struct_dict['acronym'])
+
+    cells_valid_structures = structure_list & approved_acronyms
+
+    # If a cell has nodes in RSPagl and RSPv, a coronal slice may create holes/gaps if RSPd is not in the structure list
+    if any(['RSPagl' in s for s in cells_valid_structures]) and any(['RSPv' in s for s in cells_valid_structures]):
+        cells_valid_structures.add("RSP")
+        # this should be addressed more generally    
+
+    # If a structure is an iso-cortex leaf structure, we will add the parent structure so that all layers are
+    # represented from each structure in cells_valid_structures
+    final_structures = set()
+    for struct_acr in cells_valid_structures:
+
+        number_descendents = len(tree.descendants([id_by_acronym[struct_acr]])[0])
+        # is a leaf node
+        if number_descendents == 1:
+            # add the parent structure
+            parent_id = tree.parent_ids([id_by_acronym[struct_acr]])[0]
+            parent_acronym = acronym_by_id[parent_id]
+            final_structures.add(parent_acronym)
+        else:
+            final_structures.add(struct_acr)
+
+    return list(final_structures)
+
+
 def check_coord_out_of_cortex(coordinate, structure_id, atlas_volume, closest_surface_voxel_file, surface_paths_file,
                               tree):
     """

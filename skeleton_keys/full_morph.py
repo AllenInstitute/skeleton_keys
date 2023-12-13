@@ -811,15 +811,14 @@ def find_layer_outlines(atlas_image, soma_coords, resolution=10, min_contour_pts
         elif len(contours) == 1:
             boundaries[name] = contours[0]
         else:
-            # Find the contour closest to the soma
-            min_dist = np.inf
+            # Find the contour with largest perimeter
+            max_perim = 0
             for c in contours:
                 if c.shape[0] < min_contour_pts:
                     # Skip very small contours
                     continue
-                centroid = c.mean(axis=0) * resolution
-                dist = euclidean(soma_coords[:2], centroid)
-                if dist < min_dist:
+                perimeter = len(c)
+                if max_perim < perimeter:
                     boundaries[name] = c
-                    min_dist = dist
+                    max_perim = perimeter
     return boundaries

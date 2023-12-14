@@ -14,13 +14,17 @@ from scipy.spatial.transform import Rotation
 from vtk.util.numpy_support import vtk_to_numpy
 from scipy import ndimage
 from scipy.spatial import KDTree
+from copy import copy
 
 
 def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
-                                        structures_of_interest=["Isocortex"]):#, "Entorhinal area"]):
+                                        structures_of_interest=["Isocortex"],
+                                        resolution=10):
     """
-    Given a ccf-registered morphology this will return the overlap between the structures that cell occupies
-    and a list of regions of interest.
+    Given an atlas slice and morphology aligned to that atlas slice, this will remove structures from that
+    atlas slice that the morphology does not occupy. The last step ensures that there are not disconnected
+    structures arising from the curvature of the brain and the morphological masking implemented here. 
+    
     :param rot_morph: morphology
         morphology that is in micron space that has been rotated to align with the atlas_slice
     :param atlas_slice: 2D array
@@ -36,6 +40,7 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
         list of structures the cell occupies that are descendants of structures_of_interest
     """
 
+
     id_by_acronym = tree.get_id_acronym_map()
     acronym_by_id = {v: k for k, v in id_by_acronym.items()}
     id_by_name = {v: k for k, v in tree.get_name_map().items()}
@@ -44,39 +49,70 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     voxel_rot_morph = micron_to_voxel.transform_morphology(rot_morph.clone())
     voxel_rot_morph_nodes = np.array([[n['x'], n['y'], n['z']] for n in voxel_rot_morph.nodes()]).astype(int)
 
-    structures_morph_occupies = set(atlas_slice[voxel_rot_morph_nodes[:, 0], voxel_rot_morph_nodes[:, 1]])
-    structure_list = set([acronym_by_id[i] for i in structures_morph_occupies if i != 0])
+    structure_ids_morph_occupies = set(atlas_slice[voxel_rot_morph_nodes[:, 0], voxel_rot_morph_nodes[:, 1]])
+    structure_acronyms_morph_occupies = set([acronym_by_id[i] for i in structure_ids_morph_occupies if i != 0])
 
+    structure_ids_in_atlas_slice = set(atlas_slice.flatten()) 
+
+    # find the set of structures that are approved (i.e. are descendants of the structures in structures_of_interest list)
     approved_acronyms = set()
+    approved_ids = set()
     for roi_struct_name in structures_of_interest:
         roi_id = id_by_name[roi_struct_name]
         all_roi_descendants = tree.descendants([roi_id])[0]
         for struct_dict in all_roi_descendants:
             approved_acronyms.add(struct_dict['acronym'])
+            approved_ids.add(struct_dict['id'])
 
-    cells_valid_structures = structure_list & approved_acronyms
+    valid_ids_in_atlas_slice_before_filter = approved_ids & structure_ids_in_atlas_slice
+    valid_ids_morph_occupies = structure_ids_morph_occupies & approved_ids
 
-    # If a cell has nodes in RSPagl and RSPv, a coronal slice may create holes/gaps if RSPd is not in the structure list
-    if any(['RSPagl' in s for s in cells_valid_structures]) and any(['RSPv' in s for s in cells_valid_structures]):
-        cells_valid_structures.add("RSP")
-        # this should be addressed more generally    
+    # If a morphology only occupies Layers 1 through 4, we still need layer drawings for the deeper layers. 
+    # This will add ontological sibling structures for each leaf node
+    to_add = set()
+    for struct_id in valid_ids_morph_occupies:
+        parent_id = tree.parent_ids([struct_id])[0]
+        sibling_ids = tree.descendant_ids([parent_id])[0][1:]
+        for s_id in sibling_ids:
+            to_add.add(s_id)
+            
+    valid_ids_morph_occupies = valid_ids_morph_occupies | to_add
+    valid_acronyms_morph_occupies = [acronym_by_id[i] for i in valid_ids_morph_occupies]
 
-    # If a structure is an iso-cortex leaf structure, we will add the parent structure so that all layers are
-    # represented from each structure in cells_valid_structures
-    final_structures = set()
-    for struct_acr in cells_valid_structures:
+    # Generate slice that has only valid (Isocortex) structures
+    valid_atlas_slice = copy(atlas_slice)
+    valid_atlas_slice[np.isin(valid_atlas_slice, list(valid_ids_in_atlas_slice_before_filter), invert=True)] = 0
 
-        number_descendents = len(tree.descendants([id_by_acronym[struct_acr]])[0])
-        # is a leaf node
-        if number_descendents == 1:
-            # add the parent structure
-            parent_id = tree.parent_ids([id_by_acronym[struct_acr]])[0]
-            parent_acronym = acronym_by_id[parent_id]
-            final_structures.add(parent_acronym)
-        else:
-            final_structures.add(struct_acr)
+    # Generate slice that has only valid structures morphology occupies
+    filtered_atlas_slice = copy(atlas_slice)
+    filtered_atlas_slice[np.isin(filtered_atlas_slice, list(valid_ids_morph_occupies), invert=True)] = 0
 
-    return list(final_structures)
+
+    # Run connected components on filtered_atlas_slice to only keep groups of structures that the morphology 
+    # occupies. The intention here is to remove "islands" that form in the atlas slice when we 
+    # filter out structures the morphology does not occupy. This can happen with unlucky curvature of the brain
+    # and the angle of the slice selected. For example in the 2024 Sorensen et al manuscript, cell 
+    # 182725_7649-X3440-Y17884_reg.swc exists in VISp with some local axon in dorsal and ventral parts of RSP.
+    # Given the atlas slice extracted that minimizes the curvature between pia and wm, RSP structures are not 
+    # one continuous connected components in the atlas slice. They appear in separate island. Since our morphology
+    # has axon in RSP, we need to remove the island of RSP that the cell does not innervate, otherwise we will
+    # have a Multipolygon shapely error. 
+    labels, num_components = ndimage.label(filtered_atlas_slice)
+    morph_nodes = np.array([[n['x'], n['y'], n['z']] for n in rot_morph.nodes()])
+    morph_nodes_voxel = coordinates_to_voxels(morph_nodes, resolution = (resolution,resolution,resolution))
+
+    morph_mask = np.zeros_like(filtered_atlas_slice)
+    morph_mask[morph_nodes_voxel[:,0], morph_nodes_voxel[:,1]] = 1
+
+    # find the connected components that the morphology occupies
+    morph_masked_labels = np.multiply(labels, morph_mask)
+    keeping_conn_components = [i for i in set(morph_masked_labels.flatten()) if i != 0]
+
+    mask = np.isin(labels, keeping_conn_components)
+
+    neuron_masked_filtered_atlas_slice = np.multiply(mask, filtered_atlas_slice)
+    
+    return neuron_masked_filtered_atlas_slice
 
 
 def check_coord_out_of_cortex(coordinate, structure_id, atlas_volume, closest_surface_voxel_file, surface_paths_file,

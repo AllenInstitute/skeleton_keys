@@ -115,15 +115,17 @@ def main(args):
             morph, angle_rad, base_orientation, nearest_cortex_coord)
 
     structure_list = args["structure_list"]
-    if not structure_list:
-        structure_list = full_morph.find_structures_morphology_occupies(rot_morph=rot_morph, atlas_slice=atlas_slice,
-                                                                        tree=tree)
+    if structure_list:
+        atlas_slice = full_morph.select_structures_of_interest(
+            atlas_slice,
+            structure_list,
+            tree
+        )
+    else:
+        atlas_slice = full_morph.find_structures_morphology_occupies(rot_morph=rot_morph, atlas_slice=atlas_slice,
+                                                                tree=tree)
+
     
-    atlas_slice = full_morph.select_structures_of_interest(
-        atlas_slice,
-        structure_list,
-        tree
-    )
     atlas_slice = full_morph.merge_atlas_layers(atlas_slice, tree)
 
     if base_orientation is not None and base_orientation == 'coronal':
@@ -193,7 +195,6 @@ def main(args):
         json.dump(drawing_data, f)
 
     morphology_to_swc(rot_morph, args['output_swc_file'])
-        
 
 def console_script():
     module = ags.ArgSchemaParser(schema_type=FullMorphLayerDrawingsSchema)

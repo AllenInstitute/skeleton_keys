@@ -243,6 +243,44 @@ def _initial_vertical_side_guess(touches, tortuosities):
         return np.arange(len(touches))[max_mask][straightest_ind]
 
 
+def argmin_no_duplicates(distances):
+    """
+    Uses Gale/Shapely stable marriage approach to find argmin of each 
+    column such that no duplicates are returned. I.e. each column is a 
+    groom and each row a bride, find the pairing that maximizes
+    compatibility.
+
+    Args:
+        distances (2d np.array): distance of perimeter coords to the
+        edge coordinates
+
+    Returns:
+        np array: row indices for each column that returns the argmin
+        without duplicates
+    """
+    
+    n = distances.shape[1]
+    unmarried_grooms = list(range(n))
+    engagements = {}
+
+    while unmarried_grooms:
+        groom = unmarried_grooms.pop(0)
+        bride_preferences = np.argsort(distances[:, groom])
+        for bride in bride_preferences:
+            if bride not in engagements:
+                engagements[bride] = groom
+                break
+            else:
+                brides_current_groom = engagements[bride]
+                if distances[bride, groom] < distances[bride, brides_current_groom]:
+                    unmarried_grooms.append(brides_current_groom)
+                    engagements[bride] = groom
+                    break
+    engagements = {v:k for k,v in engagements.items()}
+    
+    return np.array([engagements[i] for i in range(n)])
+
+
 def _find_initial_corners(perimeter, boundaries):
     # Get rough estimate for ends of the top & bottom layers
     layer_order = [
@@ -277,7 +315,7 @@ def _find_initial_corners(perimeter, boundaries):
     dist_to_edges = distance.cdist(perim_coords[:-1, :], edge_coords)
     init_guess = np.argmin(dist_to_edges, axis=0)
     if len(np.unique(init_guess)) < len(init_guess):
-        raise RuntimeError("initial corners were not all unique")
+        init_guess = argmin_no_duplicates(dist_to_edges)
     return init_guess
 
 

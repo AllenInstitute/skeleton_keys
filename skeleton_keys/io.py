@@ -1,15 +1,15 @@
-import pandas as pd
-import cloudfiles
-from importlib.resources import files
-import json
-from skeleton_keys.database_queries import (
-    query_for_image_series_id,
-    pia_wm_soma_from_database,
-    layer_polygons_from_database,
-)
-import os
 import io
+import json
+import os
 import re
+from importlib.resources import files
+
+import cloudfiles
+import pandas as pd
+
+from skeleton_keys.database_queries import (layer_polygons_from_database,
+                                            pia_wm_soma_from_database,
+                                            query_for_image_series_id)
 
 
 def fix_local_cloudpath(cloudpath):
@@ -121,7 +121,7 @@ def load_swc_as_dataframe(swc_file):
     df : DataFrame
         Dataframe with morphology information
     """
-    return pd.read_table(
+    return read_csv(
         swc_file,
         sep=" ",
         comment="#",
@@ -168,5 +168,7 @@ def save_lims_surface_and_layers_to_json(json_file, specimen_id):
         "layer_polygons": layer_polygons,
     }
 
+    with open(json_file, "w") as out_f:
+        json.dump(output_data, out_f)
     with open(json_file, "w") as out_f:
         json.dump(output_data, out_f)

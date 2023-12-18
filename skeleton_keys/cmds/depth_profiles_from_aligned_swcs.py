@@ -1,15 +1,14 @@
-import argschema as ags
 import os
+
+import argschema as ags
+import cloudfiles
 import numpy as np
 import pandas as pd
-from skeleton_keys.io import (
-    load_swc_as_dataframe,
-    load_default_layer_template,
-    read_json_file,
-    write_dataframe_to_csv,
-    read_bytes,
-)
+
 from skeleton_keys import cloudfields
+from skeleton_keys.io import (fix_local_cloudpath, load_default_layer_template,
+                              load_swc_as_dataframe, read_bytes,
+                              read_json_file, write_dataframe_to_csv)
 
 
 class ProfilesFromAlignedSwcsParameters(ags.ArgSchema):
@@ -62,13 +61,16 @@ def main(module=None):
 
     hist_record_list = []
     soma_record_list = []
+    swc_dir = fix_local_cloudpath(swc_dir)
+    cf = cloudfiles.CloudFiles(swc_dir)
+    files_exist = cf.exists([f"{spec_id}.swc" for spec_id in specimen_ids])
     for spec_id in specimen_ids:
         # Load individual morphology
-        swc_file = os.path.join(swc_dir, f"{spec_id}.swc")
-        if not os.path.exists(swc_file):
+        swc_file = f"{spec_id}.swc"
+        if not files_exist[swc_file]:
             print(f"No SWC file found in {swc_dir} for {spec_id}")
             continue
-
+        swc_file = os.path.join(swc_dir, swc_file)
         morph_df = load_swc_as_dataframe(swc_file)
 
         # Create the layer-aligned histogram
@@ -113,5 +115,7 @@ def main(module=None):
     )
 
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()

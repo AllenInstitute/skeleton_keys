@@ -60,7 +60,14 @@ class FullMorphLayerDrawingsSchema(ags.ArgSchema):
         description="Output JSON file with layer drawings",
     )
     output_swc_file = ags.fields.OutputFile(
-        description="Output SWC file of morphology aligned with layer drawings")
+        description="Output SWC file of morphology aligned with layer drawings"
+    )
+    local_crop_threshold = ags.fields.Float(
+        description="Distance from streamline to crop input morphology",
+        default=None,
+        allow_none=True,
+    )
+
 
 
 def main(args):
@@ -85,6 +92,15 @@ def main(args):
                                                                                     args['closest_surface_voxel_file'],
                                                                                     args['surface_paths_file'],
                                                                                     tree)
+    # Crop cell along streamline, if specified
+    crop_threshold = args['local_crop_threshold']
+    if crop_threshold is not None:
+        streamline_locate_coord = nearest_cortex_coord if out_of_cortex_bool else soma_coords
+        morph = full_morph.local_crop_cortical_morphology(morph, 
+                                   streamline_locate_coord, 
+                                   args["closest_surface_voxel_file"], 
+                                   args["surface_paths_file"],
+                                   crop_threshold)
     
     if base_orientation is None:
         atlas_slice, q = full_morph.min_curvature_atlas_slice_for_morph(

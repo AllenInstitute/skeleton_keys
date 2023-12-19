@@ -6,6 +6,7 @@ from ccf_streamlines.coordinates import coordinates_to_voxels
 from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle, affine_from_transform_translation, affine_from_translation, AffineTransform
 )
+from neuron_morphology.swc_io import Morphology
 from allensdk.core.reference_space_cache import ReferenceSpaceCache
 from skimage.measure import find_contours
 from scipy.interpolate import interpn
@@ -15,7 +16,126 @@ from vtk.util.numpy_support import vtk_to_numpy
 from scipy import ndimage
 from scipy.spatial import KDTree
 from copy import copy
+from collections import deque
 
+
+def bfs_tree(st_node, morph):
+    """
+    breadth first traversal of tree, returns nodes in segment
+
+    :param st_node: node to begin BFS traversal from.
+    :param morph: neuron_morphology Morphology object
+    :return: list of nodes in segment (including start node)
+    """
+    max_iterations = len(morph.nodes())
+    queue = deque([st_node])
+    nodes_in_segment = []
+    seg_len = 0
+    while len(queue) > 0:
+        seg_len += 1
+        if seg_len > max_iterations:
+            return [], 0
+        current_node = queue.popleft()
+        nodes_in_segment.append(current_node)
+        for ch_no in morph.get_children(current_node):
+            queue.append(ch_no)
+
+    return nodes_in_segment
+
+def mean_spacing(coords):
+    """
+    Calculate the average inter-coordinate spacing of a streamline.
+
+    Parameters:
+        coords (numpy.ndarray): Input coordinates.
+
+    Returns:
+        float: Average inter-coordinate spacing.
+    """
+    dists = np.linalg.norm(coords[1:] - coords[:-1], axis=1)
+    return np.mean(dists)
+
+def upsample_streamline_betwn(streamline, desired_spacing=0.5, max_iter=100):
+    """
+    Upsample a streamline until the desired spacing between coordinates is reached or maximum iterations are reached.
+
+    Parameters:
+        streamline (numpy.ndarray): Streamline coordinates.
+        desired_spacing (float): Desired spacing between coordinates of the streamline.
+        max_iter (int): Maximum number of iterations before stopping.
+
+    Returns:
+        numpy.ndarray: Upsampled streamline.
+    """
+    spacing = mean_spacing(streamline)
+    it_ct = 0
+
+    while desired_spacing < spacing:
+        new_streamline = np.zeros((2 * len(streamline) - 1, 3))
+        new_streamline[::2] = streamline
+        new_streamline[1::2] = (streamline[:-1] + streamline[1:]) / 2
+        streamline = new_streamline
+        spacing = mean_spacing(streamline)
+        it_ct += 1
+
+        if it_ct > max_iter:
+            break
+
+    return streamline
+
+def local_crop_cortical_morphology(morphology, 
+                                   streamline_locate_coord, 
+                                   closest_surface_voxel_file, 
+                                   surface_paths_file,
+                                   threshold=500):
+
+    """Find the streamline nearest to `streamline_locate_coord`, upsample it and find nodes 
+    from `morphology` that are within `threshold` distance of the streamline. 
+    
+    Parameters:
+        morphology (neuron_morphology.morphology): Input morphology
+        streamline_locate_coord (numpy.ndarray): reference coordinate to find streamling (typically the soma coordinate)
+        closest_surface_voxel_file (str): path to closest_surface_voxel_file
+        surface_paths_file (str): path to surface_paths_file
+        threshold (float): allowed distance from streamline
+
+    Returns:
+        new_morph: (neuron_morphology.morphology): "local crop" of morphology
+    """
+    closest_streamline = find_closest_streamline(streamline_locate_coord,
+                                            closest_surface_voxel_file,
+                                            surface_paths_file
+                                            )
+    upsampled_streamline = upsample_streamline_betwn(closest_streamline)
+
+    streamline_tree = KDTree(upsampled_streamline)
+    morph_nodes = np.array([[n['x'],n['y'],n['z']] for n in morphology.nodes()])
+    morph_ids = np.array([n['id'] for n in morphology.nodes()])
+
+    dists,inds = streamline_tree.query(morph_nodes)
+    
+    keeping_inds = dists<threshold
+    close_enough_node_ids = set(morph_ids[keeping_inds])
+    too_far_node_ids = set(morph_ids[~keeping_inds])
+    close_nodes = [node for ct, node in enumerate(morphology.nodes()) if keeping_inds[ct]]
+    
+    new_morph = Morphology(close_nodes, 
+                           parent_id_cb=lambda x: x['parent'], 
+                           node_id_cb=lambda x: x['id'])
+
+    orphans = [n for n in new_morph.nodes() if n['parent'] in too_far_node_ids]
+    disconnected_node_ids = []
+    for orphan_no in orphans:
+        downstream_nodes = bfs_tree(orphan_no, new_morph)
+        for no in downstream_nodes:
+            disconnected_node_ids.append(no['id'])
+
+    keeping_nodes = [n for n in new_morph.nodes() if n['id'] not in disconnected_node_ids]
+    new_morph = Morphology(keeping_nodes,
+                            parent_id_cb=lambda x: x['parent'],
+                            node_id_cb=lambda x: x['id'])
+
+    return new_morph
 
 def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
                                         structures_of_interest=["Isocortex"],

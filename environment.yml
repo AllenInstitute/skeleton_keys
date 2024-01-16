@@ -1,0 +1,32 @@
+name: skeleton_keys_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - fenics-dolfinx
+  - fenics-libdolfinx
+  - python-gmsh
+  - hdf5
+  - h5py
+  - Jinja2>=3.0
+  - numpy>=1.14.2
+  - scipy
+  - pandas
+  - scikit-learn
+  - shapely
+  - imageio
+  - pg8000<2.0.0
+  - boto3>=1.12.42
+  - geopandas
+  - rasterio
+  - openjpeg
+  - six
+  - pip:
+      - allensdk
+      - argschema
+      - ccf-streamlines
+      - cloud-files
+      - argschema==3.0.1
+      - task-queue
+      - neuron-morphology

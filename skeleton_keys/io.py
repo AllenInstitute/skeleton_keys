@@ -18,7 +18,7 @@ def load_default_layer_template():
     depths : dict
         Dictionary of distances to the pia (in microns) from the upper side of each layer
     """
-    depth_file = files('skeleton_keys') / "test_files/avg_layer_depths.json"
+    depth_file = files('skeleton_keys') / "test_files/mouse_me_and_met_avg_layer_depths.json"
 
     with open(depth_file, "r") as fn:
         depths = json.load(fn)

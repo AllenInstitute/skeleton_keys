@@ -3,13 +3,19 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+
+import sys
+import os
+sys.path.insert(0, os.path.abspath("../.."))
+
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'skeleton_keys'
 copyright = '2022, Nathan Gouwens, Forrest Collman, Matt Mallory, Clare Gamlin'
 author = 'Nathan Gouwens, Forrest Collman, Matt Mallory, Clare Gamlin'
-release = '0.1.0'
+release = '0.1.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -31,8 +37,18 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = []
 
-autodoc_mock_imports = ["fenics", 'mshr']
-
+autodoc_mock_imports = [
+    'neuron_morphology',
+    'pandas',
+    'allensdk',
+    'sklearn',
+    'scipy',
+    'ccf_streamlines',
+    'shapely',
+    'geopandas',
+    'tqdm',
+    'seaborn',
+]
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

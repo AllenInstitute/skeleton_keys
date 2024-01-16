@@ -1,1 +1,1 @@
-docker build -t fcollman/skelkeys . --build-arg GITHUB_TOKEN=$GITHUB_TOKEN
+docker buildx build --platform linux/amd64 -t fcollman/skelkeys:$1 . 

@@ -246,6 +246,7 @@ we would not want to analyze axonal compartments).
 To continue our example, we will analyze the features using the following command:
 
 .. code:: shell
+
     skelekeys-morph-features  --specimen_id_file example_specimen_ids.txt \
     --swc_dir upright_swcs \
     --aligned_depth_profile_file aligned_depth_profiles.csv \

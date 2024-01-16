@@ -12,11 +12,11 @@ from shapely.geometry.polygon import Point, Polygon, LineString, orient
 
 
 def snap_hand_drawn_polygons(
-    layer_polygons,
-    pia_surface,
-    wm_surface,
-    layer_order,
-    working_scale=1.0 / 4, # is this right? default from InputParameters
+        layer_polygons,
+        pia_surface,
+        wm_surface,
+        layer_order,
+        working_scale=1.0 / 4,  # is this right? default from InputParameters
 ):
     """ Snap together hand-drawn polygons """
     pia_wm_vertices = get_vertices_from_two_lines(pia_surface["path"],
@@ -44,14 +44,14 @@ def snap_hand_drawn_polygons(
     result_geos.register_polygons(snapped_polys)
 
     result_geos = (result_geos
-        .transform(
-            lambda hr, vt: (
-                hr + working_geo.close_bounds.horigin,
-                vt + working_geo.close_bounds.vorigin
-            )
+                   .transform(
+        lambda hr, vt: (
+            hr + working_geo.close_bounds.horigin,
+            vt + working_geo.close_bounds.vorigin
         )
-        .transform(make_scale(1.0 / working_scale))
     )
+                   .transform(make_scale(1.0 / working_scale))
+                   )
 
     for key in list(result_geos.polygons.keys()):
         result_geos.polygons[key] = result_geos.polygons[key].intersection(bounds)
@@ -63,7 +63,6 @@ def snap_hand_drawn_polygons(
                     keep_poly = p
                     poly_area = p.area
             result_geos.polygons[key] = keep_poly
-
 
     boundaries = find_vertical_surfaces(
         result_geos.polygons,
@@ -99,6 +98,34 @@ def convert_and_translate_snapped_to_microns(polys_surfs, res, translation):
         polys.append(p)
 
     return {"surfaces": surfs, "polygons": polys}
+
+
+def remove_duplicate_coordinates_from_drawings(drawings):
+    """
+    Will remove any duplicate coordinates found in a drawing dictionary.
+
+    :param drawings: List or Dict of polygon/surface drawings
+    :return: List or Dict of polygon/surface drawings having unique x-y coordinates with order preserved
+    """
+    if isinstance(drawings, list):
+        cleaned_drawings = []
+        for poly_dict in drawings:
+            path_arr = np.array(poly_dict['path'])
+            _, idx = np.unique(path_arr, axis=0, return_index=True)
+            poly_dict['path'] = path_arr[sorted(idx)].tolist()
+
+            cleaned_drawings.append(poly_dict)
+
+        return cleaned_drawings
+
+    elif isinstance(drawings, dict):
+        path_arr = np.array(drawings['path'])
+        _, idx = np.unique(path_arr, axis=0, return_index=True)
+        drawings['path'] = path_arr[sorted(idx)].tolist()
+
+        return drawings
+    else:
+        raise TypeError("Must provide either list of drawings, or individual drawing dictionary")
 
 
 def perimeter_of_layers(boundaries):

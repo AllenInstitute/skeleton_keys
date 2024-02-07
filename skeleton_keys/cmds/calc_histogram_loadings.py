@@ -1,21 +1,18 @@
-import json
 import argschema as ags
 import numpy as np
-import pandas as pd
-from skeleton_keys.database_queries import swc_paths_from_database
-
+from skeleton_keys.io import read_bytes, read_csv
 from skeleton_keys.cmds.process_morphology_features import (
     select_and_convert_depth_columns,
     analyze_depth_profiles,
 )
-import os
+from skeleton_keys import cloudfields
 
 
 class CalcHistogramLoadingsParameters(ags.ArgSchema):
-    specimen_id_file = ags.fields.InputFile(
+    specimen_id_file = cloudfields.InputFile(
         description="File with specimen IDs on each line",
     )
-    aligned_depth_profile_file = ags.fields.InputFile(
+    aligned_depth_profile_file = cloudfields.InputFile(
         description="CSV file with layer-aligned depth profile information",
     )
     analyze_axon = ags.fields.Boolean(
@@ -34,17 +31,17 @@ class CalcHistogramLoadingsParameters(ags.ArgSchema):
         description="Whether to analyze depth profile of basal dendrite compartments",
         default=False,
     )
-    save_axon_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_axon_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save axon depth profile loadings",
     )
-    save_basal_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_basal_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save basal dendrite depth profile loadings",
     )
-    save_apical_dendrite_depth_profile_loadings_file = ags.fields.OutputFile(
+    save_apical_dendrite_depth_profile_loadings_file = cloudfields.OutputFile(
         default=None,
         allow_none=True,
         description="Output file to save apical dendrite depth profile loadings",
@@ -54,11 +51,11 @@ class CalcHistogramLoadingsParameters(ags.ArgSchema):
 def main(args):
     # Load specimen IDs
     specimen_id_file = args["specimen_id_file"]
-    specimen_ids = np.loadtxt(specimen_id_file, ndmin=1).astype(int)
+    specimen_ids = np.loadtxt(read_bytes(specimen_id_file), ndmin=1).astype(int)
 
     # Load depth profiles
     aligned_depth_profile_file = args["aligned_depth_profile_file"]
-    depth_profile_df = pd.read_csv(aligned_depth_profile_file, index_col=0)
+    depth_profile_df = read_csv(aligned_depth_profile_file, index_col=0)
 
     # Compartment analysis flags
     analyze_axon_flag = args["analyze_axon"]

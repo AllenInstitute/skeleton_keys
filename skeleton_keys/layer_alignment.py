@@ -5,8 +5,8 @@ import shapely.vectorized
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from shapely.geometry import LineString
-from typing import Dict, List, Tuple, Optional
-from neuron_morphology.layered_point_depths.__main__ import tuplize, setup_interpolator
+from typing import Tuple, Optional
+from neuron_morphology.layered_point_depths.__main__ import setup_interpolator
 from tqdm import tqdm
 
 
@@ -200,6 +200,8 @@ def layer_aligned_y_values(x, y, avg_layer_depths, layer_list,
         pos = all_pos[mask, :]
         layer_fracs = fractions_within_layer(pos, pia_surf, wm_surf, depth_interp, dx_interp, dy_interp)
         layer_y_values = -avg_pia_side - (avg_wm_side - avg_pia_side) * layer_fracs
+        if np.any(np.isinf(layer_y_values)):
+            raise ValueError(f'There are inf y values in {layer}')
         y_values[mask] = layer_y_values
 
     mask_outside_layers = ~mask_inside_layers
@@ -253,6 +255,9 @@ def fractions_within_layer(pos, pia_side_surf, wm_side_surf,
     local_wm_side_depths = step_all_nodes(
         pos, depth_interp, dx_interp, dy_interp, wm_side_surf, -step_size, max_iter)
     local_wm_side_depths[local_wm_side_depths < 0] = 0
+
+    if np.any(np.isinf(local_pia_side_depths - depths) / (local_pia_side_depths - local_wm_side_depths)):
+        raise ValueError("Infinite values detected in layer fraction calculation.")
 
     return (local_pia_side_depths - depths) / (local_pia_side_depths - local_wm_side_depths)
 

@@ -25,7 +25,6 @@ def plot_cortical_cell(ax, sk, ld=None, title=None):
     for compartment, color in MORPH_COLORS.items():
         lines_x = []
         lines_y = []
-        guess = None
         for c in sk.compartment_list_by_type(compartment):
             if c["parent"] == -1:
                 continue

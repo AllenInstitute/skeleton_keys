@@ -3,7 +3,7 @@ RUN apt-get update && \
     apt-get install -y build-essential libglu1 \
     libxcursor-dev libxft2 libxinerama1 \
     libfltk1.3-dev libfreetype6-dev \
-    libgl1-mesa-dev  && \
+    libgl1-mesa-dev openssh-client && \
     rm -rf /var/lib/apt/lists/*
 RUN mamba install -y -c conda-forge conda-lock conda-pack
 COPY conda-lock.yml .
@@ -14,6 +14,9 @@ RUN mamba run -n skeleton_keys pip install -r requirements.txt
 COPY . /usr/local/src/skeleton_keys
 WORKDIR /usr/local/src/skeleton_keys
 RUN mamba run -n skeleton_keys pip install .
+# RUN apt-get update && \
+#     apt-get install -y openssh-client && \
+#     rm -rf /var/lib/apt/lists/*
 # RUN conda-pack -n skeleton_keys -o /tmp/env.tar && \
 #     mkdir /venv && cd /venv && tar xf /tmp/env.tar && \
 #     rm /tmp/env.tar

@@ -51,6 +51,7 @@ def layer_align_cell(
     module = argschema.ArgSchemaParser(
         schema_type=LayerAlignedSwcSchema, input_data=input_data, args=[]
     )
+    print(f'starting {specimen_id}')
     layer_align_main(module.args)
 
 
@@ -115,7 +116,7 @@ def extract_morphology_features(
         "apical_dendrite_depth_profile_loadings_file": apical_dendrite_depth_profile_loadings_file,
         "output_file": output_file,
     }
-
+    print(f'processing {specimen_id}')
     input_data = {k: v for k, v in input_data.items() if v is not None}
     module = argschema.ArgSchemaParser(
         schema_type=ProcessMorphologyFeaturesParameters, input_data=input_data, args=[]

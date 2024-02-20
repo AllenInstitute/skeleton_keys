@@ -103,7 +103,8 @@ def main(args):
                                    crop_threshold)
     
     if base_orientation is None:
-        atlas_slice, q = full_morph.min_curvature_atlas_slice_for_morph(
+        angle_rad = None
+        atlas_slice, q, off_coronal_angle = full_morph.min_curvature_atlas_slice_for_morph(
             morph,
             atlas_volume,
             args["closest_surface_voxel_file"],
@@ -118,6 +119,7 @@ def main(args):
         rot_morph, rot_nearest_cortex_coord = full_morph.align_morphology_to_drawings(rot_morph, atlas_slice,
                                                                                       rot_nearest_cortex_coord)
     else:
+        off_coronal_angle = None
         atlas_slice, angle_rad, base_orientation = full_morph.angled_atlas_slice_for_morph(
             morph,
             atlas_volume,
@@ -206,6 +208,25 @@ def main(args):
             "path": (b * resolution).tolist(),
         })
 
+    # record details about the atlas slice orientation
+    orientation_description = """
+    Data recording the orientation of the slice extracted from the ccf atlas. Used to rotate 
+    uprighted and aligned morphologies post-hoc so that they are near-coronal oriented. If 
+    base_orientation is None, Positive atlas_slice_off_coronal_angle (degrees) indicates the upright  
+    and aligned morphology should be rotated counter-clockwise about the y-axis passing through the 
+    soma. Negative value indicates a clockwise rotation about the y-axis. This rotation achieves a 
+    near-coronal orientation of aligned and upright files. If base_orientation is not None, the 
+    base_orientation string can be used to determine the direction of the anterior-posterior 
+    axis of the uprighted cell. This is handled in 
+    skeleton_keys.full_morph.correct_upright_morph_orientation
+    """
+    drawing_data['atlas_slice_orientation'] = {
+        "name":'atlas_slice_orientation',
+        "description":orientation_description,
+        "base_orientation":base_orientation,
+        "base_orientation_slice_angle":angle_rad,
+        "atlas_slice_off_coronal_angle":off_coronal_angle,
+    }
     # Write output files
     with open(args['output_drawings_file'], 'w') as f:
         json.dump(drawing_data, f)

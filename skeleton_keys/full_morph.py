@@ -519,7 +519,7 @@ def align_morphology_to_drawings(morphology, atlas_slice, closest_cortex_node=No
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morphology)
     if closest_cortex_node is not None:
-        T_translate.transform(closest_cortex_node)
+        closest_cortex_node = T_translate.transform(closest_cortex_node)
 
     return morphology, closest_cortex_node
 

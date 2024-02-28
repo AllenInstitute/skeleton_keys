@@ -187,8 +187,8 @@ def main(args):
 
     # align morph to depth field
     # depth field is centered at origin
-    soma_morph = morph.get_soma()
-    translation_to_origin = np.array([-soma_morph["x"], -soma_morph["y"], 0])
+    mean_soma = np.array(soma_drawing["path"]).mean(axis=0)
+    translation_to_origin = np.array([-mean_soma[0], -mean_soma[1], 0])
     translation_affine = affine_from_translation(translation_to_origin)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)
@@ -246,7 +246,7 @@ def main(args):
 
     # rotate full_morph generated cell so it is near coronal orientation
     if args['ccf_slice_orientation_correction'] and atlas_slice_orient_data is not None:
-        morph = correct_upright_morph_orientation(morph, atlas_slice_orient_data)
+        aligned_morph = correct_upright_morph_orientation(aligned_morph, atlas_slice_orient_data)
       
     # save to swc
     output_file = args["output_file"]

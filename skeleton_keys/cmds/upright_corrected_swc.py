@@ -198,7 +198,8 @@ def main(args):
         pia_surface, depth_field, gradient_field, translation
     )
 
-    translation_for_soma = np.array([0, -soma_dist_to_pia, 0])
+    current_soma = morph.get_soma()
+    translation_for_soma = np.array([0-current_soma['x'], -soma_dist_to_pia-current_soma['y'], 0])
     translation_affine = affine_from_translation(translation_for_soma)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)

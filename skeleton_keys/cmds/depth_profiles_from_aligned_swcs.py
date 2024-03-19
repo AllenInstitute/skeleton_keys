@@ -41,7 +41,7 @@ def main(module=None):
 
     # Load the specimen IDs
     specimen_id_file = module.args["specimen_id_file"]
-    specimen_ids = np.loadtxt(read_bytes(specimen_id_file), dtype=int, ndmin=1)
+    specimen_ids = np.genfromtxt(specimen_id_file, dtype=None, encoding=None, ndmin=1)
 
     # Load the layer info
     layer_depths_file = module.args["layer_depths_file"]

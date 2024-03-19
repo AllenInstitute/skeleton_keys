@@ -19,6 +19,50 @@ from copy import copy
 from collections import deque
 
 
+def correct_upright_morph_orientation(upright_morphology, atlas_slice_orient_data):
+    """
+    Given atlas slice information, this will rotate the morphology so that it will subsequently 
+    be quantified in a near coronal orientation. Where atlas slice information is data from either
+    skeleton_keys.full_morph.angled_atlas_slice_for_morph or 
+    skeleton_keys.full_morph.min_curvature_atlas_slice_for_morph
+
+    :param upright_morphology: an upright (or layer aligned) neuron_morphology.Morphology
+    :param atlas_slice_orient_data: dict with the following keys:
+        "base_orientation": str or None - 'coronal' or 'parasagittal',
+        "base_orientation_slice_angle": float or None, radians degree of the slice when base_orientation is not None
+        "atlas_slice_off_coronal_angle": float or None, angle (degrees) needed to rotate the morphology to achieve coronal perspective
+
+    :return: neuron_morphology.Morphology
+
+    """
+    morph = upright_morphology.clone()
+    
+    base_orientation = atlas_slice_orient_data['base_orientation']
+    if base_orientation is not None:
+        if base_orientation == 'coronal':
+            # no rotation needed
+            return morph
+        
+        elif base_orientation=="parasagittal":
+            # because features in x are able to tolerate left/right handedness it does 
+            # not matter if we rotate 90 or 270 degrees about the y axis
+            n_degrees = 90
+        else:
+            msg = f"""
+            unexpected value for base_orientation found in atlas_slice_orient_data ({base_orientation}). Expected
+            values are ['parasagittal', 'coronal', None]
+            """
+            raise ValueError(msg)
+                
+    else:
+        n_degrees = atlas_slice_orient_data['atlas_slice_off_coronal_angle']
+
+    n_radians = np.radians(n_degrees)        
+    rotation_matrix = rotation_from_angle(n_radians, axis=1)
+    morph, _ = _rotate_morphology_around_soma(morph, rotation_matrix, None)
+    
+    return morph
+
 def bfs_tree(st_node, morph):
     """
     breadth first traversal of tree, returns nodes in segment
@@ -475,7 +519,7 @@ def align_morphology_to_drawings(morphology, atlas_slice, closest_cortex_node=No
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morphology)
     if closest_cortex_node is not None:
-        T_translate.transform(closest_cortex_node)
+        closest_cortex_node = T_translate.transform(closest_cortex_node)
 
     return morphology, closest_cortex_node
 
@@ -815,7 +859,61 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
 
     atlas_slice = atlas_slice.reshape(reshape_size)
 
-    return atlas_slice, q
+    # To ensure that cells appear in a near coronal perspective, we need 
+    # to find the angle between the vector normal to the 3d slice and the
+    # anterior-posterior axis so that we can rotate the upright and layer
+    # aligned file post-hoc. 
+    
+    # Find the corners that define the original unrotated slice grid
+    x_min, x_max = np.min(slice_grid[0]), np.max(slice_grid[0])
+    y_min, y_max = np.min(slice_grid[1]), np.max(slice_grid[1])
+    z_min, z_max = np.min(slice_grid[2]), np.max(slice_grid[2])
+
+    corner1 = [x_min, y_min, z_min]
+    corner2 = [x_min, y_max, z_min]
+    corner3 = [x_max, y_min, z_min]
+    corner4 = [x_max, y_max, z_min]
+    corners = np.array([corner1,corner2,corner3,corner4])
+    corner_coords = np.array([
+    corners[:,0].flatten(),
+    corners[:,1].flatten(),
+    corners[:,2].flatten()
+    ])
+    
+    # Rotate the corners so we can define the rotated plane
+    rot_corners_coords = (M @ (corner_coords - soma_coords_for_atlas[:, np.newaxis])).T + soma_coords_for_atlas
+    
+    # Compute vectors from the corners
+    v1 = rot_corners_coords[1] - rot_corners_coords[0]
+    v2 = rot_corners_coords[2] - rot_corners_coords[0]
+
+    # Compute the normal vector to the plane
+    normal_vector = np.cross(v1, v2)
+    normal_vector /= np.linalg.norm(normal_vector)  
+
+    # Project the normal vector onto the x-z plane 
+    normal_vector_2d = np.array([normal_vector[0], normal_vector[2]])
+
+    # if the vector is facing away from the brain in the A-P axis,
+    # flip so that it points towards the brain 
+    if normal_vector[0]<0:
+        normal_vector_2d = -1*normal_vector_2d
+
+    # tells us which direction to rotate the morph post-hoc
+    sign_flip = 1 if normal_vector_2d[1]<0 else -1
+
+    # Define the anterior-posterior axis vector
+    vector_xz = np.array([1,0])
+
+    # Compute the dot product between the two vectors
+    dot_product = np.dot(normal_vector_2d, vector_xz)
+
+    # Compute the angle between the vectors
+    angle_radians = np.arccos(dot_product)
+    angle_degrees = np.degrees(angle_radians)
+    angle_degrees = sign_flip*angle_degrees
+    
+    return atlas_slice, q, angle_degrees
 
 def select_structures_of_interest(atlas_image, structure_list, tree=None):
     """ Select particular structures of interest and mask out others

@@ -19,25 +19,30 @@ class LayerEditor(tk.Frame):
 
     def __init__(self, parent, input_file, output_file):
         tk.Frame.__init__(self, parent)
-        with open(input_file,"r") as f:
-            data_dict = json.load(f)
         
+        self.input_file = input_file
+        self.output_file = output_file
+        self._load_data()
+        self._create_canvas()
+        self._populate_canvas()
+        
+    def _load_data(self):
+        with open(self.input_file, "r") as f:
+            data_dict = json.load(f)
+
         self.pia_dict = data_dict['pia_path']
         self.wm_dict = data_dict['wm_path']
         self.soma_dict = data_dict['soma_path']
         self.list_of_layer_dicts = data_dict['layer_polygons']
-        
-        self.list_of_drawing_dict = [self.pia_dict] + self.list_of_layer_dicts + [self.wm_dict, self.soma_dict ] 
-        
-        # create a canvas
+
+        self.list_of_drawing_dict = [
+            self.pia_dict] + self.list_of_layer_dicts + [self.wm_dict, self.soma_dict]
+
+    def _create_canvas(self):
         self.canvas = tk.Canvas(width=1000, height=1000, background="bisque")
         self.canvas.pack(fill="both", expand=True)
-
-        # this data is used to keep track of an
-        # item being dragged
-        self._drag_data = {"x": 0, "y": 0, "item": None}
-        self.token_order = defaultdict(list)
         
+        # scale data to fit canvas
         min_x,min_y = np.inf,np.inf
         max_x,max_y = 0,0
         for draw_dict in self.list_of_drawing_dict:
@@ -63,10 +68,6 @@ class LayerEditor(tk.Frame):
 
         x_scale = (norm_range[1] - norm_range[0])
         y_scale = (norm_range[1] - norm_range[0])
-
-        # Store token coordinates
-        self.token_coords = {}
-        
         self.min_x = min_x
         self.max_x = max_x
         self.min_y = min_y
@@ -74,7 +75,14 @@ class LayerEditor(tk.Frame):
         self.x_scale = x_scale
         self.y_scale = y_scale
         self.norm_range = norm_range
+
+    def _populate_canvas(self):
         
+        # this data is used to keep track of an item being dragged
+        self._drag_data = {"x": 0, "y": 0, "item": None}
+        self.token_order = defaultdict(list)
+        self.token_coords = {}
+                
         self.color_dict = {
             "Layer1":'red',
             "Layer2/3":'orange',
@@ -91,24 +99,15 @@ class LayerEditor(tk.Frame):
             data = np.array(draw_dict['path'])
             draw_name = draw_dict['name']
             color = self.color_dict[draw_name]
-            # self.token_labels[draw_name] = [] 
             for d in data:           
-                scaled_x = 1000 * (((d[0] - min_x) / (max_x - min_x)) * x_scale + norm_range[0])
-                scaled_y = 1000 * (((d[1] - min_y) / (max_y - min_y)) * y_scale + norm_range[0])
+                scaled_x = 1000 * (((d[0] - self.min_x) / (self.max_x - self.min_x)) * self.x_scale + self.norm_range[0])
+                scaled_y = 1000 * (((d[1] - self.min_y) / (self.max_y - self.min_y)) * self.y_scale + self.norm_range[0])
                 token_id = self.create_token(scaled_x, scaled_y, color, 5)
                 self.token_coords[token_id] = (scaled_x, scaled_y)
                 self.token_order[draw_name].append(token_id)
-                # self.token_labels[draw_name].append(token_id)
 
         # Draw lines connecting tokens
         self.draw_lines()
-
-        # add bindings for clicking, dragging, and releasing over
-        # any object with the "token" tag
-        self.canvas.tag_bind("token", "<ButtonPress-1>", self.drag_start)
-        self.canvas.tag_bind("token", "<ButtonRelease-1>", self.drag_stop)
-        self.canvas.tag_bind("token", "<B1-Motion>", self.drag)
-
         # bind canvas click to add or move a token based on the mode
         self.canvas.bind("<Button-1>", self.canvas_click)
         
@@ -132,8 +131,10 @@ class LayerEditor(tk.Frame):
         eraser_button.pack(side="left", padx=5)
         
         # Create a Save button
-        save_button = tk.Button(self, text="Save", command=lambda: self.save_canvas_state(output_file))
-        save_button.pack(side="left", padx=5)
+        save_button = tk.Button(self, text="Save", command=lambda: self.save_canvas_state(self.output_file))
+        save_button.pack(side="left", padx=5)      
+
+
         
     def save_canvas_state(self, output_file):
         """Save the current state of the canvas to a JSON file"""
@@ -163,6 +164,127 @@ class LayerEditor(tk.Frame):
 
         with open(output_file, 'w') as f:
             json.dump(final_dict, f)
+    
+    def canvas_click(self, event):
+        """Handle canvas click to add or move a token based on the mode"""
+        x, y = event.x, event.y
+
+        if not any([v.get() for v in self.add_token_mode_variables.values()]) and not self.eraser_mode.get():
+            # If neither add token mode nor eraser mode is active, handle drag and drop
+            self.drag_start(event)
+            self.canvas.bind("<ButtonRelease-1>", self.drag_stop)
+            self.canvas.bind("<B1-Motion>", self.drag)
+
+        elif any([v.get() for v in self.add_token_mode_variables.values()]) and not self.eraser_mode.get():
+            # If only add token mode is active
+            self.add_token(event)
+
+        elif not any([v.get() for v in self.add_token_mode_variables.values()]) and self.eraser_mode.get():
+            # If only eraser mode is active
+            self.delete_nearest_token(x, y)
+        else:
+            # multiple modes selected
+            token_type_to_add = [k for k,v in self.add_token_mode_variables.items() if v.get()]
+            modes_selected = ["Node Eraser"] + token_type_to_add
+            error_message = "Specify only one mode type. currently.\n"
+            error_message += "You have selected:\n{}".format(modes_selected)
+            # Display an error message in a pop-up box
+            messagebox.showerror("Error", error_message)
+
+    def add_token(self, event):
+        """Add token at the clicked position"""
+        x, y = event.x, event.y
+        token_type_to_add = [k for k, v in self.add_token_mode_variables.items() if v.get()]
+        if len(token_type_to_add) != 1:
+            error_message = "PLEASE SPECIFY ONLY ONE COORDINATE TYPE TO ADD.\n"
+            error_message += "You have selected:\n{}".format(token_type_to_add)
+            # Display an error message in a pop-up box
+            messagebox.showerror("Error", error_message)
+        else:
+            token_type_to_add = token_type_to_add[0]
+            token_type_color = self.color_dict[token_type_to_add]
+            nearest_tokens = self.find_two_nearest_tokens(x, y, token_type_to_add)
+            nearest_token_indices = [self.token_order[token_type_to_add].index(t) for t in nearest_tokens]
+            if nearest_tokens:
+                new_token_id = self.create_token(x, y, token_type_color, 5)
+                nearest_token_1_idx = max(nearest_token_indices)
+                self.token_coords[new_token_id] = (x, y)
+                self.token_order[token_type_to_add].insert(nearest_token_1_idx, new_token_id)
+                self.draw_lines()
+            
+    def create_token(self, x, y, color, radius):
+        """Create a token at the given coordinate in the given color"""
+        token_id = self.canvas.create_oval(
+            x - radius,
+            y - radius,
+            x + radius,
+            y + radius,
+            outline=color,
+            fill=color,
+            tags=("token",),
+        )
+        return token_id
+
+    def draw_lines(self):
+        """Draw lines connecting tokens"""
+        self.canvas.delete("line")  # Delete existing lines        
+        for label, token_order_list in self.token_order.items():
+            line_color = self.color_dict[label]
+            for i in range(len(token_order_list) - 1):
+                k1, k2 = token_order_list[i], token_order_list[i + 1]
+                x1, y1 = self.token_coords[k1]
+                x2, y2 = self.token_coords[k2]
+                self.canvas.create_line(x1, y1, x2, y2, fill=line_color, tags=("line",))
+
+    def update_lines(self):
+        """Update lines connecting tokens"""
+        self.canvas.delete("line")  # Delete existing lines
+        self.draw_lines()  # Draw new lines based on updated coordinates
+
+    def find_nearest_token(self, x, y):
+        """Find the nearest token to the given coordinates"""
+        min_distance = 5
+        nearest_token = None
+        for token_id, (token_x, token_y) in self.token_coords.items():
+            distance = math.sqrt((x - token_x)**2 + (y - token_y)**2)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_token = token_id
+        return nearest_token
+
+    def drag_start(self, event):
+        """Beginning drag of an object"""
+        x, y = event.x, event.y
+        nearest_token = self.find_nearest_token(x, y)
+        if nearest_token is not None:
+            self._drag_data["item"] = nearest_token
+            self._drag_data["x"] = x
+            self._drag_data["y"] = y
+
+    def drag_stop(self, event):
+        """End drag of an object"""
+        # Reset the drag information
+        self._drag_data["item"] = None
+        self._drag_data["x"] = 0
+        self._drag_data["y"] = 0
+        # Update lines after dragging
+        self.update_lines()
+
+    def drag(self, event):
+        """Handle dragging of an object"""
+        # Compute how much the mouse has moved
+        delta_x = event.x - self._drag_data["x"]
+        delta_y = event.y - self._drag_data["y"]
+        item_id = self._drag_data["item"]
+        if item_id is not None:
+            # Move the object the appropriate amount
+            self.canvas.move(self._drag_data["item"], delta_x, delta_y)
+            # Record the new position
+            self._drag_data["x"] = event.x
+            self._drag_data["y"] = event.y
+            self.token_coords[item_id] = (event.x, event.y)
+            # Update lines during dragging
+            self.update_lines()    
     
     def point_to_line_distance(self, x, y, x1, y1, x2, y2):
         # Step 1: Find the equation of the line passing through (x1, y1) and (x2, y2)
@@ -226,103 +348,6 @@ class LayerEditor(tk.Frame):
 
         self.draw_lines()
     
-    def canvas_click(self, event):
-        """Handle canvas click to add or move a token based on the mode"""
-        x, y = event.x, event.y
-        
-        
-        if any([v.get() for v in self.add_token_mode_variables.values()]) and self.eraser_mode.get():
-            token_type_to_add = [k for k,v in self.add_token_mode_variables.items() if v.get()]
-            modes_selected = ["Node Eraser"] + token_type_to_add
-            error_message = "Specify only one mode type. currently.\n"
-            error_message += "You have selected:\n{}".format(modes_selected)
-            # Display an error message in a pop-up box
-            messagebox.showerror("Error", error_message)
-        
-        if any([v.get() for v in self.add_token_mode_variables.values()]):
-            
-            token_type_to_add = [k for k,v in self.add_token_mode_variables.items() if v.get()]
-            if len(token_type_to_add)!=1:
-                error_message = "PLEASE SPECIFY ONLY ONE COORDINATE TYPE TO ADD.\n"
-                error_message += "You have selected:\n{}".format(token_type_to_add)
-
-                # Display an error message in a pop-up box
-                messagebox.showerror("Error", error_message)
-            else:
-                token_type_to_add = token_type_to_add[0]
-            token_type_color = self.color_dict[token_type_to_add]
-            # Add Token Mode
-            nearest_tokens = self.find_two_nearest_tokens(x, y, token_type_to_add)
-            nearest_token_indices = [self.token_order[token_type_to_add].index(t) for t in nearest_tokens]
-            if nearest_tokens:
-                new_token_id = self.create_token(x, y, token_type_color, 15)                
-                nearest_token_1_idx =  max(nearest_token_indices)
-                self.token_coords[new_token_id] = (x,y)
-                self.token_order[token_type_to_add].insert(nearest_token_1_idx, new_token_id)                
-                self.draw_lines() 
-                
-        if self.eraser_mode.get():
-            self.delete_nearest_token(x,y)
-            
-    def create_token(self, x, y, color, radius):
-        """Create a token at the given coordinate in the given color"""
-        token_id = self.canvas.create_oval(
-            x - radius,
-            y - radius,
-            x + radius,
-            y + radius,
-            outline=color,
-            fill=color,
-            tags=("token",),
-        )
-        return token_id
-
-    def draw_lines(self):
-        """Draw lines connecting tokens"""
-        self.canvas.delete("line")  # Delete existing lines        
-        for label, token_order_list in self.token_order.items():
-            line_color = self.color_dict[label]
-            for i in range(len(token_order_list) - 1):
-                k1, k2 = token_order_list[i], token_order_list[i + 1]
-                x1, y1 = self.token_coords[k1]
-                x2, y2 = self.token_coords[k2]
-                self.canvas.create_line(x1, y1, x2, y2, fill=line_color, tags=("line",))
-
-    def update_lines(self):
-        """Update lines connecting tokens"""
-        self.canvas.delete("line")  # Delete existing lines
-        self.draw_lines()  # Draw new lines based on updated coordinates
-
-    def drag_start(self, event):
-        """Beginning drag of an object"""
-        # Get the item ID directly from the event object
-        self._drag_data["item"] = event.widget.find_withtag(tk.CURRENT)[0]
-        self._drag_data["x"] = event.x
-        self._drag_data["y"] = event.y
-
-    def drag_stop(self, event):
-        """End drag of an object"""
-        # Reset the drag information
-        self._drag_data["item"] = None
-        self._drag_data["x"] = 0
-        self._drag_data["y"] = 0
-        # Update lines after dragging
-        self.update_lines()
-
-    def drag(self, event):
-        """Handle dragging of an object"""
-        # Compute how much the mouse has moved
-        delta_x = event.x - self._drag_data["x"]
-        delta_y = event.y - self._drag_data["y"]
-        item_id = self._drag_data["item"]
-        # Move the object the appropriate amount
-        self.canvas.move(self._drag_data["item"], delta_x, delta_y)
-        # Record the new position
-        self._drag_data["x"] = event.x
-        self._drag_data["y"] = event.y
-        self.token_coords[item_id] = (event.x, event.y)
-        # Update lines during dragging
-        self.update_lines()
 
 def console_script():
     module = ags.ArgSchemaParser(schema_type=DrawingEditSchema)

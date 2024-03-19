@@ -3,6 +3,10 @@ import logging
 import numpy as np
 import pandas as pd
 import argschema as ags
+from skeleton_keys.layer_alignment import (
+    layer_aligned_y_values_for_morph,
+    cortex_thickness_aligned_y_values_for_morph,
+)
 from neuron_morphology.swc_io import morphology_from_swc, morphology_to_swc
 from neuron_morphology.transforms.pia_wm_streamlines.calculate_pia_wm_streamlines import (
     run_streamlines,
@@ -32,15 +36,12 @@ from skeleton_keys.drawings import (
 )
 from skeleton_keys.upright import corrected_without_uprighting_morph
 from skeleton_keys.io import read_json_file,load_default_layer_template
-from skeleton_keys.layer_alignment import (
-    layer_aligned_y_values_for_morph,
-    cortex_thickness_aligned_y_values_for_morph,
-)
 from skeleton_keys import cloudfields
+from skeleton_keys.full_morph import correct_upright_morph_orientation
 
 
 class LayerAlignedSwcSchema(ags.ArgSchema):
-    specimen_id = ags.fields.Integer(description="Specimen ID")
+    specimen_id = ags.fields.String(description="Specimen ID")
     swc_path = cloudfields.InputFile(
         description="path to SWC file (optional)", default=None, allow_none=True
     )
@@ -75,6 +76,24 @@ class LayerAlignedSwcSchema(ags.ArgSchema):
         default=["Layer1", "Layer2/3", "Layer4", "Layer5", "Layer6a", "Layer6b"],
         cli_as_single_argument=True,
     )
+    align_morph_to_layer_drawings = ags.fields.Bool(
+        default=True,
+        description=(
+            "If the morphology and layer drawings are not alginmened (not overlaping), this flag  "
+            "should be set True to translate the morphology to the mean 'soma_drawing' value "
+            "found in layer drawings. I.e. if you plot layer polygons and the morphology and they are "
+            "not aligned, this should be set True. This is standard in LIMS/patch-seq data. However, in "
+            "ccf-registered data extracted from skeleton-keys, this is not True, so this should be set False."
+        )
+    )
+    ccf_slice_orientation_correction = ags.fields.Boolean(
+        default=True,
+        description=(
+            "When skeleton_keys.cmds.full_morph_layer_drawings was used to generate --swc_path and "
+            "--surface_and_layers_file, this will rotate the upright morphology about the "
+            "soma-centered y-axis so that the result is near coronal orientation."
+        )
+    )
 
 
 def main(args):
@@ -83,6 +102,7 @@ def main(args):
     specimen_id = args["specimen_id"]
     swc_path = args["swc_path"]
     if swc_path is None:
+        specimen_id = int(specimen_id)
         swc_path = swc_paths_from_database([specimen_id])[specimen_id]
 
     # Load the reference layer depths
@@ -96,14 +116,18 @@ def main(args):
 
     # Get pia, white matter, soma, and layers
     surface_and_layers_file = args["surface_and_layers_file"]
+    atlas_slice_orient_data = None
     if surface_and_layers_file is not None:
         surfaces_and_paths = read_json_file(surface_and_layers_file)
         pia_surface = surfaces_and_paths["pia_path"]
         wm_surface = surfaces_and_paths["wm_path"]
         soma_drawing = surfaces_and_paths["soma_path"]
         layer_polygons = surfaces_and_paths["layer_polygons"]
+        if "atlas_slice_orientation" in surfaces_and_paths:
+            atlas_slice_orient_data = surfaces_and_paths['atlas_slice_orientation']
     else:
         # Query for image series ID
+        specimen_id = int(specimen_id)
         imser_id = query_for_image_series_id(specimen_id)
 
         # Query for pia, white matter, and soma
@@ -137,7 +161,15 @@ def main(args):
     wm_path = ",".join(["{},{}".format(x, y) for x, y in wm_surface["path"]])
     soma_path = ",".join(["{},{}".format(x, y) for x, y in soma_drawing["path"]])
     resolution = pia_surface["resolution"]
-
+    
+    # align morphology to layer drawings, if necessary
+    mean_soma = np.array(soma_drawing["path"]).mean(axis=0) * resolution
+    if args['align_morph_to_layer_drawings']:
+        curr_soma = morph.get_soma()
+        to_drawing_aff = [mean_soma[0] - curr_soma['x'], mean_soma[1]-curr_soma['y'], 0]
+        to_drawing_soma_affine = affine_from_translation(to_drawing_aff)
+        AffineTransform(to_drawing_soma_affine).transform_morphology(morph) 
+            
     logging.info(f"Calculating depth field for {specimen_id}")
     depth_field, gradient_field, translation = run_streamlines(
         pia_path,
@@ -146,7 +178,6 @@ def main(args):
         soma_path,
     )
     upright_angle = get_upright_angle(gradient_field)
-
     # Correct for shrinkage and/or slice angle if requested
     if args["correct_for_shrinkage"] or args["correct_for_slice_angle"]:
         if args["correct_for_shrinkage"]:
@@ -173,15 +204,16 @@ def main(args):
         morph = corrected_without_uprighting_morph(
             morph, upright_angle, slice_angle, flip_status, shrink_factor
         )
+        # because corrected_without_uprighting_morph moves the morphologys soma to the origin, 
+        # the translation_to_origin below would no longer be valid without updating mean_soma here
+        mean_soma = [morph.get_soma()['x'], morph.get_soma()['y']]
 
     # align morph to depth field
     # depth field is centered at origin
-    soma_morph = morph.get_soma()
-    translation_to_origin = np.array([-soma_morph["x"], -soma_morph["y"], 0])
+    translation_to_origin = np.array([-mean_soma[0], -mean_soma[1], 0])
     translation_affine = affine_from_translation(translation_to_origin)
     T_translate = AffineTransform(translation_affine)
     T_translate.transform_morphology(morph)
-
     # get aligned y-values for morph
     if no_layers:
         logging.info("Calculating cortex-thickness adjusted depths for all points")
@@ -233,6 +265,10 @@ def main(args):
         parent_id_cb=lambda node: node["parent"],
     )
 
+    # rotate full_morph generated cell so it is near coronal orientation
+    if args['ccf_slice_orientation_correction'] and atlas_slice_orient_data is not None:
+        aligned_morph = correct_upright_morph_orientation(aligned_morph, atlas_slice_orient_data)
+      
     # save to swc
     output_file = args["output_file"]
     morphology_to_swc(aligned_morph, output_file)

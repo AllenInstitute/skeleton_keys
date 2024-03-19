@@ -359,7 +359,7 @@ def main(args):
     # Load specimen IDs
     if args["specimen_id_file"] is not None:
         specimen_id_file = args["specimen_id_file"]
-        specimen_ids = np.loadtxt(read_bytes(specimen_id_file), ndmin=1).astype(int)
+        specimen_ids = np.genfromtxt(specimen_id_file, dtype=None, encoding=None, ndmin=1)
     elif args["specimen_id"] is not None:
         specimen_ids = [args["specimen_id"]]
         if analyze_axon_flag:

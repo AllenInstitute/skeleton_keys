@@ -171,7 +171,7 @@ def main(args):
             pin_df = pd.DataFrame.from_records(query_pinning_info())
             slice_angle = slice_angle_tilt(
                 pin_df,
-                specimen_id,
+                int(specimen_id),
                 args["closest_surface_voxel_file"],
                 args["surface_paths_file"],
             )

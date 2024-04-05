@@ -1,1 +1,4 @@
-include skeleton_keys/test_files/*.json
+include skeleton_keys/layer_templates/*.json
+include skeleton_keys/example_data/*
+include skeleton_keys/example_data/layer_aligned_swcs/*
+include skeleton_keys/example_data/upright_swcs/*

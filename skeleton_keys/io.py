@@ -11,7 +11,6 @@ from skeleton_keys.database_queries import (layer_polygons_from_database,
                                             pia_wm_soma_from_database,
                                             query_for_image_series_id)
 
-
 def fix_local_cloudpath(cloudpath):
     if "://" not in cloudpath:
         dir, _ = os.path.split(cloudpath)
@@ -87,7 +86,7 @@ def load_default_layer_template():
         Dictionary of distances to the pia (in microns) from the upper side of each layer
     """
     depth_file = (
-        files("skeleton_keys") / "test_files/mouse_me_and_met_avg_layer_depths.json"
+        files("skeleton_keys") / "layer_templates/mouse_me_and_met_avg_layer_depths.json"
     )
 
     with open(depth_file, "r") as fn:

@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Allen Institute for Brain Science", email = "Marmot@AllenInstitute.onmicrosoft.com" }
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "argschema>=3.0.4",
     "ccf-streamlines",
@@ -14,9 +14,11 @@ dependencies = [
     "neuron-morphology",
     "numpy>=2.0.2",
     "pandas>=2.3.3",
+    "pg8000>=1.31.5",
     "scikit-learn>=1.6.1",
     "scipy>=1.13.1",
     "shapely>=2.0.7",
+    "vtk>=9.6.0",
 ]
 
 [project.scripts]

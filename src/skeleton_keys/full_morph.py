@@ -7,7 +7,6 @@ from neuron_morphology.transforms.affine_transform import (
     rotation_from_angle, affine_from_transform_translation, affine_from_translation, AffineTransform
 )
 from neuron_morphology.swc_io import Morphology
-from allensdk.core.reference_space_cache import ReferenceSpaceCache
 from skimage.measure import find_contours
 from scipy.interpolate import interpn
 from scipy.spatial.distance import euclidean
@@ -21,9 +20,9 @@ from collections import deque
 
 def correct_upright_morph_orientation(upright_morphology, atlas_slice_orient_data):
     """
-    Given atlas slice information, this will rotate the morphology so that it will subsequently 
+    Given atlas slice information, this will rotate the morphology so that it will subsequently
     be quantified in a near coronal orientation. Where atlas slice information is data from either
-    skeleton_keys.full_morph.angled_atlas_slice_for_morph or 
+    skeleton_keys.full_morph.angled_atlas_slice_for_morph or
     skeleton_keys.full_morph.min_curvature_atlas_slice_for_morph
 
     :param upright_morphology: an upright (or layer aligned) neuron_morphology.Morphology
@@ -36,15 +35,15 @@ def correct_upright_morph_orientation(upright_morphology, atlas_slice_orient_dat
 
     """
     morph = upright_morphology.clone()
-    
+
     base_orientation = atlas_slice_orient_data['base_orientation']
     if base_orientation is not None:
         if base_orientation == 'coronal':
             # no rotation needed
             return morph
-        
+
         elif base_orientation=="parasagittal":
-            # because features in x are able to tolerate left/right handedness it does 
+            # because features in x are able to tolerate left/right handedness it does
             # not matter if we rotate 90 or 270 degrees about the y axis
             n_degrees = 90
         else:
@@ -53,14 +52,14 @@ def correct_upright_morph_orientation(upright_morphology, atlas_slice_orient_dat
             values are ['parasagittal', 'coronal', None]
             """
             raise ValueError(msg)
-                
+
     else:
         n_degrees = atlas_slice_orient_data['atlas_slice_off_coronal_angle']
 
-    n_radians = np.radians(n_degrees)        
+    n_radians = np.radians(n_degrees)
     rotation_matrix = rotation_from_angle(n_radians, axis=1)
     morph, _ = _rotate_morphology_around_soma(morph, rotation_matrix, None)
-    
+
     return morph
 
 def bfs_tree(st_node, morph):
@@ -127,15 +126,15 @@ def upsample_streamline_betwn(streamline, desired_spacing=0.5, max_iter=100):
 
     return streamline
 
-def local_crop_cortical_morphology(morphology, 
-                                   streamline_locate_coord, 
-                                   closest_surface_voxel_file, 
+def local_crop_cortical_morphology(morphology,
+                                   streamline_locate_coord,
+                                   closest_surface_voxel_file,
                                    surface_paths_file,
                                    threshold=500):
 
-    """Find the streamline nearest to `streamline_locate_coord`, upsample it and find nodes 
-    from `morphology` that are within `threshold` distance of the streamline. 
-    
+    """Find the streamline nearest to `streamline_locate_coord`, upsample it and find nodes
+    from `morphology` that are within `threshold` distance of the streamline.
+
     Parameters:
         morphology (neuron_morphology.morphology): Input morphology
         streamline_locate_coord (numpy.ndarray): reference coordinate to find streamling (typically the soma coordinate)
@@ -157,14 +156,14 @@ def local_crop_cortical_morphology(morphology,
     morph_ids = np.array([n['id'] for n in morphology.nodes()])
 
     dists,inds = streamline_tree.query(morph_nodes)
-    
+
     keeping_inds = dists<threshold
     close_enough_node_ids = set(morph_ids[keeping_inds])
     too_far_node_ids = set(morph_ids[~keeping_inds])
     close_nodes = [node for ct, node in enumerate(morphology.nodes()) if keeping_inds[ct]]
-    
-    new_morph = Morphology(close_nodes, 
-                           parent_id_cb=lambda x: x['parent'], 
+
+    new_morph = Morphology(close_nodes,
+                           parent_id_cb=lambda x: x['parent'],
                            node_id_cb=lambda x: x['id'])
 
     orphans = [n for n in new_morph.nodes() if n['parent'] in too_far_node_ids]
@@ -187,8 +186,8 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     """
     Given an atlas slice and morphology aligned to that atlas slice, this will remove structures from that
     atlas slice that the morphology does not occupy. The last step ensures that there are not disconnected
-    structures arising from the curvature of the brain and the morphological masking implemented here. 
-    
+    structures arising from the curvature of the brain and the morphological masking implemented here.
+
     :param rot_morph: morphology
         morphology that is in micron space that has been rotated to align with the atlas_slice
     :param atlas_slice: 2D array
@@ -216,7 +215,7 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     structure_ids_morph_occupies = set(atlas_slice[voxel_rot_morph_nodes[:, 0], voxel_rot_morph_nodes[:, 1]])
     structure_acronyms_morph_occupies = set([acronym_by_id[i] for i in structure_ids_morph_occupies if i != 0])
 
-    structure_ids_in_atlas_slice = set(atlas_slice.flatten()) 
+    structure_ids_in_atlas_slice = set(atlas_slice.flatten())
 
     # find the set of structures that are approved (i.e. are descendants of the structures in structures_of_interest list)
     approved_acronyms = set()
@@ -231,7 +230,7 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     valid_ids_in_atlas_slice_before_filter = approved_ids & structure_ids_in_atlas_slice
     valid_ids_morph_occupies = structure_ids_morph_occupies & approved_ids
 
-    # If a morphology only occupies Layers 1 through 4, we still need layer drawings for the deeper layers. 
+    # If a morphology only occupies Layers 1 through 4, we still need layer drawings for the deeper layers.
     # This will add ontological sibling structures for each leaf node
     to_add = set()
     for struct_id in valid_ids_morph_occupies:
@@ -239,7 +238,7 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
         sibling_ids = tree.descendant_ids([parent_id])[0][1:]
         for s_id in sibling_ids:
             to_add.add(s_id)
-            
+
     valid_ids_morph_occupies = valid_ids_morph_occupies | to_add
     valid_acronyms_morph_occupies = [acronym_by_id[i] for i in valid_ids_morph_occupies]
 
@@ -252,15 +251,15 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     filtered_atlas_slice[np.isin(filtered_atlas_slice, list(valid_ids_morph_occupies), invert=True)] = 0
 
 
-    # Run connected components on filtered_atlas_slice to only keep groups of structures that the morphology 
-    # occupies. The intention here is to remove "islands" that form in the atlas slice when we 
+    # Run connected components on filtered_atlas_slice to only keep groups of structures that the morphology
+    # occupies. The intention here is to remove "islands" that form in the atlas slice when we
     # filter out structures the morphology does not occupy. This can happen with unlucky curvature of the brain
-    # and the angle of the slice selected. For example in the 2024 Sorensen et al manuscript, cell 
+    # and the angle of the slice selected. For example in the 2024 Sorensen et al manuscript, cell
     # 182725_7649-X3440-Y17884_reg.swc exists in VISp with some local axon in dorsal and ventral parts of RSP.
-    # Given the atlas slice extracted that minimizes the curvature between pia and wm, RSP structures are not 
+    # Given the atlas slice extracted that minimizes the curvature between pia and wm, RSP structures are not
     # one continuous connected components in the atlas slice. They appear in separate island. Since our morphology
     # has axon in RSP, we need to remove the island of RSP that the cell does not innervate, otherwise we will
-    # have a Multipolygon shapely error. 
+    # have a Multipolygon shapely error.
     labels, num_components = ndimage.label(filtered_atlas_slice)
     morph_nodes = np.array([[n['x'], n['y'], n['z']] for n in rot_morph.nodes()])
     morph_nodes_voxel = coordinates_to_voxels(morph_nodes, resolution = (resolution,resolution,resolution))
@@ -275,7 +274,7 @@ def find_structures_morphology_occupies(rot_morph, atlas_slice, tree,
     mask = np.isin(labels, keeping_conn_components)
 
     neuron_masked_filtered_atlas_slice = np.multiply(mask, filtered_atlas_slice)
-    
+
     return neuron_masked_filtered_atlas_slice
 
 
@@ -859,11 +858,11 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
 
     atlas_slice = atlas_slice.reshape(reshape_size)
 
-    # To ensure that cells appear in a near coronal perspective, we need 
+    # To ensure that cells appear in a near coronal perspective, we need
     # to find the angle between the vector normal to the 3d slice and the
     # anterior-posterior axis so that we can rotate the upright and layer
-    # aligned file post-hoc. 
-    
+    # aligned file post-hoc.
+
     # Find the corners that define the original unrotated slice grid
     x_min, x_max = np.min(slice_grid[0]), np.max(slice_grid[0])
     y_min, y_max = np.min(slice_grid[1]), np.max(slice_grid[1])
@@ -879,23 +878,23 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
     corners[:,1].flatten(),
     corners[:,2].flatten()
     ])
-    
+
     # Rotate the corners so we can define the rotated plane
     rot_corners_coords = (M @ (corner_coords - soma_coords_for_atlas[:, np.newaxis])).T + soma_coords_for_atlas
-    
+
     # Compute vectors from the corners
     v1 = rot_corners_coords[1] - rot_corners_coords[0]
     v2 = rot_corners_coords[2] - rot_corners_coords[0]
 
     # Compute the normal vector to the plane
     normal_vector = np.cross(v1, v2)
-    normal_vector /= np.linalg.norm(normal_vector)  
+    normal_vector /= np.linalg.norm(normal_vector)
 
-    # Project the normal vector onto the x-z plane 
+    # Project the normal vector onto the x-z plane
     normal_vector_2d = np.array([normal_vector[0], normal_vector[2]])
 
     # if the vector is facing away from the brain in the A-P axis,
-    # flip so that it points towards the brain 
+    # flip so that it points towards the brain
     if normal_vector[0]<0:
         normal_vector_2d = -1*normal_vector_2d
 
@@ -912,7 +911,7 @@ def min_curvature_atlas_slice_for_morph(morph, atlas_volume,
     angle_radians = np.arccos(dot_product)
     angle_degrees = np.degrees(angle_radians)
     angle_degrees = sign_flip*angle_degrees
-    
+
     return atlas_slice, q, angle_degrees
 
 def select_structures_of_interest(atlas_image, structure_list, tree=None):
@@ -933,6 +932,8 @@ def select_structures_of_interest(atlas_image, structure_list, tree=None):
         Atlas image with non-selected regions masked out
     """
     if tree is None:
+        from allensdk.core.reference_space_cache import ReferenceSpaceCache
+
         reference_space_key = 'annotation/ccf_2017'
         resolution = 10
         rspc = ReferenceSpaceCache(resolution, reference_space_key, manifest='manifest.json')
@@ -966,6 +967,8 @@ def merge_atlas_layers(atlas_image, tree=None):
     """
 
     if tree is None:
+        from allensdk.core.reference_space_cache import ReferenceSpaceCache
+
         reference_space_key = 'annotation/ccf_2017'
         resolution = 10
         rspc = ReferenceSpaceCache(resolution, reference_space_key, manifest='manifest.json')

@@ -1,3 +1,45 @@
+[project]
+name = "skeleton-keys"
+version = "0.1.1"
+description = "Tools for working with single-neuron morphological reconstructions"
+readme = "README.md"
+authors = [
+    { name = "Allen Institute for Brain Science", email = "Marmot@AllenInstitute.onmicrosoft.com" }
+]
+requires-python = ">=3.9"
+dependencies = [
+    "argschema>=3.0.4",
+    "ccf-streamlines",
+    "geopandas>=1.0.1",
+    "neuron-morphology",
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.13.1",
+    "shapely>=2.0.7",
+]
+
+[project.scripts]
+skelekeys-morph-features = "skeleton_keys.cmds.process_morphology_features:console_script"
+skelekeys-postprocess-features = "skeleton_keys.cmds.postprocess_features:console_script"
+skelekeys-profiles-from-swcs = "skeleton_keys.cmds.depth_profiles_from_aligned_swcs:main"
+skelekeys-profiles-from-coords = "skeleton_keys.cmds.depth_profiles_from_aligned_coords:console_script"
+skelekeys-layer-aligned-swc = "skeleton_keys.cmds.layer_aligned_swc:console_script"
+skelekeys-layer-aligned-coords = "skeleton_keys.cmds.layer_aligned_coords:console_script"
+skelekeys-upright-corrected-swc = "skeleton_keys.cmds.upright_corrected_swc:console_script"
+skelekeys-calc-histogram-loadings = "skeleton_keys.cmds.calc_histogram_loadings:console_script"
+skelekeys-edit-layer-drawings = "skeleton_keys.cmds.edit_layer_drawings:console_script"
+skelekeys-fullmorph-layer-drawings = "skeleton_keys.cmds.full_morph_layer_drawings:console_script"
+
+
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+neuron-morphology = { git = "https://github.com/AllenInstitute/neuron_morphology", branch = "use-uv" }
+ccf-streamlines = { git = "https://github.com/AllenInstitute/ccf_streamlines", branch = "use-uv" }
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
